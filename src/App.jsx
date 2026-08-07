@@ -288,15 +288,17 @@ export default function App() {
       `}</style>
 
       {/* ---- Scoreboard summary ---- */}
-      <div style={{ background: COLORS.navy }} className="px-4 pt-5 pb-4">
-        <div className="flex items-center justify-between mb-3">
-          <div>
+      {/* paddingTop uses safe-area-inset-top so content clears iPhone notch/Dynamic Island corner */}
+      <div style={{ background: COLORS.navy, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)', paddingBottom: 16, paddingLeft: 16, paddingRight: 16 }}>
+        <div className="flex items-start justify-between mb-3">
+          <div style={{ paddingTop: 4 }}>
             <div style={{ color: activeDateKey !== todayKey ? COLORS.yellow : '#8FA3B8', fontSize: 12 }}>
               {activeDateKey !== todayKey ? `Đang nhập: ${dateKeyToVN(activeDateKey)}` : formatVNDate(today)}
             </div>
             <div className="score-num" style={{ color: 'white', fontSize: 20 }}>SÂN BÓNG CHUYỀN</div>
           </div>
-          <div className="flex items-center gap-2">
+          {/* marginTop + marginRight pulls button away from iPhone corner curve */}
+          <div className="flex items-center gap-2" style={{ marginTop: 20, marginRight: 4 }}>
             {activeDateKey !== todayKey && (
               <button
                 onClick={() => setActiveDateKey(todayKey)}
@@ -319,7 +321,7 @@ export default function App() {
       </div>
 
       {/* ---- Content ---- */}
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 80px)' }}>
         {tab === 'today' && (
           <TodayTab
             checkins={checkins}
@@ -352,7 +354,8 @@ export default function App() {
       </div>
 
       {/* ---- Bottom tab bar ---- */}
-      <div style={{ background: COLORS.card, borderTop: `1px solid ${COLORS.line}` }} className="fixed bottom-0 left-0 right-0 flex items-center px-1 py-2 gap-0.5">
+      {/* paddingBottom uses safe-area-inset-bottom so buttons clear iPhone home indicator */}
+      <div style={{ background: COLORS.card, borderTop: `1px solid ${COLORS.line}`, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }} className="fixed bottom-0 left-0 right-0 flex items-center px-1 pt-2 pb-2 gap-0.5">
         <TabButton icon={<ClipboardList size={19} />} label="Hôm nay" active={tab === 'today'} onClick={() => setTab('today')} />
         <TabButton icon={<Users size={19} />} label="Danh sách" active={tab === 'roster'} onClick={() => setTab('roster')} />
         <TabButton icon={<Receipt size={19} />} label="Báo cáo" active={tab === 'reports'} onClick={() => setTab('reports')} />
