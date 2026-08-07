@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  Search, Plus, X, Download, UserPlus, Users, ClipboardList,
+  Search, Plus, X, Download, Upload, UserPlus, Users, ClipboardList,
   Receipt, Loader2, Banknote, Landmark, ChevronLeft, Settings2,
   ListPlus, Pencil, Trash2, Lock, LockOpen, Calculator, CheckSquare, Square
 } from 'lucide-react';
@@ -367,7 +367,7 @@ export default function App() {
         />
       )}
       {showSettings && (
-        <SettingsModal fee={fee} setFee={setFee} waterFee={waterFee} setWaterFee={setWaterFee} onClose={() => setShowSettings(false)} />
+        <SettingsModal fee={fee} setFee={setFee} waterFee={waterFee} setWaterFee={setWaterFee} onClose={() => setShowSettings(false)} onRestore={() => window.location.reload()} />
       )}
       {reportView && (
         <ReportModal
@@ -583,9 +583,50 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
   );
 }
 
-function SettingsModal({ fee, setFee, waterFee, setWaterFee, onClose }) {
+function SettingsModal({ fee, setFee, waterFee, setWaterFee, onClose, onRestore }) {
   const [val, setVal] = useState(String(fee));
   const [waterVal, setWaterVal] = useState(String(waterFee));
+  const [restoreMsg, setRestoreMsg] = useState('');
+  const fileRef = useRef(null);
+
+  const exportBackup = () => {
+    const data = {};
+    Object.keys(localStorage).forEach(k => {
+      try { data[k] = JSON.parse(localStorage.getItem(k)); } catch {}
+    });
+    const blob = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), data }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const d = new Date();
+    a.download = `bong-chuyen-backup-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(ev.target.result);
+        const data = parsed.data || parsed;
+        let count = 0;
+        Object.entries(data).forEach(([k, v]) => {
+          localStorage.setItem(k, JSON.stringify(v));
+          count++;
+        });
+        setRestoreMsg(`✓ Đã khôi phục ${count} mục. Đang tải lại...`);
+        setTimeout(() => { onRestore(); onClose(); }, 1200);
+      } catch {
+        setRestoreMsg('✗ File không hợp lệ, thử lại.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   return (
     <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={onClose}>
       <div onClick={e => e.stopPropagation()} className="w-full rounded-t-2xl p-5" style={{ background: COLORS.card, maxWidth: 480 }}>
@@ -603,16 +644,46 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, onClose }) {
           inputMode="numeric"
           value={waterVal}
           onChange={e => setWaterVal(e.target.value.replace(/[^\d]/g, ''))}
-          className="w-full px-3 py-2.5 rounded-lg text-sm mb-3 outline-none"
+          className="w-full px-3 py-2.5 rounded-lg text-sm mb-4 outline-none"
           style={{ border: `1px solid ${COLORS.line}` }}
         />
         <button
           onClick={() => { setFee(Number(val) || DEFAULT_FEE); setWaterFee(Number(waterVal) || 0); onClose(); }}
-          className="w-full py-2.5 rounded-lg text-sm font-medium"
+          className="w-full py-2.5 rounded-lg text-sm font-medium mb-4"
           style={{ background: COLORS.blue, color: 'white' }}
         >
           Lưu
         </button>
+
+        {/* Backup section */}
+        <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 16 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Sao lưu dữ liệu</div>
+          <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 12 }}>
+            Xuất file JSON để lưu vào Files / iCloud. Nhập lại để khôi phục khi đổi máy hoặc xoá cache.
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={exportBackup}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.navy, color: 'white' }}
+            >
+              <Download size={15} /> Xuất backup
+            </button>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
+            >
+              <Upload size={15} /> Nhập backup
+            </button>
+            <input ref={fileRef} type="file" accept=".json" onChange={handleRestoreFile} style={{ display: 'none' }} />
+          </div>
+          {restoreMsg && (
+            <div style={{ marginTop: 8, fontSize: 12, color: restoreMsg.startsWith('✓') ? COLORS.green : COLORS.red }}>
+              {restoreMsg}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
