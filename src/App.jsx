@@ -828,6 +828,32 @@ function SettlementTab({ historyKeys }) {
 
   return (
     <div className="px-3 pt-3 pb-4">
+      {/* Counter + quick-select */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span
+            className="score-num px-3 py-1 rounded-full"
+            style={{
+              fontSize: 15,
+              background: selected.size === 10 ? COLORS.green : selected.size > 0 ? COLORS.blue : COLORS.navy,
+              color: 'white',
+              transition: 'background 0.2s',
+            }}
+          >
+            {selected.size}
+          </span>
+          <span style={{ fontSize: 13, color: COLORS.muted }}>
+            {selected.size === 0 ? 'ngày chưa chọn' : selected.size === 10 ? 'ngày ✓ đủ 1 chu kỳ' : `/ 10 ngày`}
+          </span>
+        </div>
+        <button
+          onClick={clearAll}
+          style={{ fontSize: 12, color: COLORS.muted }}
+        >
+          Bỏ chọn tất cả
+        </button>
+      </div>
+
       {/* Quick-select buttons */}
       <div className="flex gap-2 mb-3 flex-wrap">
         <button
@@ -842,21 +868,14 @@ function SettlementTab({ historyKeys }) {
           className="px-3 py-1.5 rounded-full text-xs font-medium"
           style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
         >
-          5 ngày
+          5 ngày gần nhất
         </button>
         <button
           onClick={selectAll}
           className="px-3 py-1.5 rounded-full text-xs font-medium"
           style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
         >
-          Tất cả
-        </button>
-        <button
-          onClick={clearAll}
-          className="px-3 py-1.5 rounded-full text-xs font-medium"
-          style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.muted }}
-        >
-          Bỏ chọn
+          Tất cả ({historyKeys.length})
         </button>
       </div>
 
