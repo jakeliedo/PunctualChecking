@@ -10,22 +10,9 @@ function makeIcon(ballImg, size) {
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
 
-  const bgR = size * 0.22; // iOS-style corner radius
-
-  // ── Rounded square background (navy) ──
-  ctx.beginPath();
-  ctx.moveTo(bgR, 0);
-  ctx.lineTo(size - bgR, 0);
-  ctx.quadraticCurveTo(size, 0, size, bgR);
-  ctx.lineTo(size, size - bgR);
-  ctx.quadraticCurveTo(size, size, size - bgR, size);
-  ctx.lineTo(bgR, size);
-  ctx.quadraticCurveTo(0, size, 0, size - bgR);
-  ctx.lineTo(0, bgR);
-  ctx.quadraticCurveTo(0, 0, bgR, 0);
-  ctx.closePath();
-  ctx.fillStyle = '#1C2B3A';
-  ctx.fill();
+  // Plain white background — iOS/Android applies its own corner mask
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, size, size);
 
   // ── Find ball bounds in source image ──
   // The image is square with a white background and the ball centered.
