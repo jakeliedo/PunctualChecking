@@ -33,17 +33,29 @@ function makeIcon(ballImg, size) {
   const probe = createCanvas(ballImg.width, ballImg.height);
   const pctx = probe.getContext('2d');
   pctx.drawImage(ballImg, 0, 0);
-  const data = pctx.getImageData(0, 0, ballImg.width, ballImg.height).data;
+  const imgData = pctx.getImageData(0, 0, ballImg.width, ballImg.height);
+  const data = imgData.data;
 
   const W = ballImg.width, H = ballImg.height;
+
+  // Sample background color from the 4 corners (average)
+  const corners = [[0,0],[W-1,0],[0,H-1],[W-1,H-1]];
+  let cR = 0, cG = 0, cB = 0;
+  corners.forEach(([x, y]) => {
+    const i = (y * W + x) * 4;
+    cR += data[i]; cG += data[i+1]; cB += data[i+2];
+  });
+  cR /= 4; cG /= 4; cB /= 4;
+
   let minX = W, maxX = 0, minY = H, maxY = 0;
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const i = (y * W + x) * 4;
       const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
-      // Non-white, non-transparent pixel = ball
-      if (a > 30 && !(r > 240 && g > 240 && b > 240)) {
+      // Color distance from background
+      const dist = Math.sqrt((r-cR)**2 + (g-cG)**2 + (b-cB)**2);
+      if (a > 30 && dist > 28) {
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
