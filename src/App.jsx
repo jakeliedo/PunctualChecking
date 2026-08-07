@@ -27,6 +27,7 @@ function dateKeyOf(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pa
 function formatVNDate(d) { return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; }
 function formatVNTime(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 function formatMoney(n) { return (Number(n) || 0).toLocaleString('vi-VN') + 'đ'; }
+function dateKeyToVN(key) { const [y, mo, da] = key.split('-'); return `${da}/${mo}/${y}`; }
 function newId(prefix) { return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`; }
 function sortMembersFirst(list) {
   return [...list.filter(c => !c.isGuest), ...list.filter(c => c.isGuest)];
@@ -62,7 +63,8 @@ export default function App() {
   const [fee, setFee] = useState(DEFAULT_FEE);
   const [waterFee, setWaterFee] = useState(15000);
   const [today] = useState(new Date());
-  const [todayKey] = useState(dateKeyOf(new Date()));
+  const todayKey = dateKeyOf(today);
+  const [activeDateKey, setActiveDateKey] = useState(todayKey);
   const [checkins, setCheckins] = useState([]);
   const [tab, setTab] = useState('today');
   const [search, setSearch] = useState('');
@@ -82,7 +84,7 @@ export default function App() {
     (async () => {
       const m = await storageGet('members');
       const f = await storageGet('fee-config');
-      const day = await storageGet(`day:${todayKey}`);
+      const day = await storageGet(`day:${activeDateKey}`);
       const loadedMembers = (m && m.length > 0) ? m : DEFAULT_MEMBERS;
       setMembers(loadedMembers.map(x => ({ ...x, joinedAt: x.joinedAt || Date.now() })));
       setFee(f?.fee || DEFAULT_FEE);
@@ -95,19 +97,29 @@ export default function App() {
       setHistoryKeys(keys);
       setLoading(false);
     })();
-  }, [todayKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reload checkins when user switches to a different date
+  useEffect(() => {
+    if (loading) return;
+    storageGet(`day:${activeDateKey}`).then(day => {
+      setCheckins(day?.checkins || []);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDateKey]);
 
   // ---------- Persist ----------
   useEffect(() => { if (!loading) storageSet('members', members); }, [members, loading]);
   useEffect(() => { if (!loading) storageSet('fee-config', { fee, waterFee }); }, [fee, waterFee, loading]);
   useEffect(() => {
     if (!loading) {
-      storageSet(`day:${todayKey}`, { checkins, waterFeeUsed: waterFee, savedAt: Date.now() });
+      storageSet(`day:${activeDateKey}`, { checkins, waterFeeUsed: waterFee, savedAt: Date.now() });
       setHistoryKeys(
         Object.keys(localStorage).filter(k => k.startsWith('day:')).sort().reverse()
       );
     }
-  }, [checkins, loading, todayKey, waterFee]);
+  }, [checkins, loading, activeDateKey, waterFee]);
 
   // ---------- Derived ----------
   const attendanceRate = (m) => {
@@ -221,7 +233,7 @@ export default function App() {
   const openReport = () => {
     const now = new Date();
     setReportView({
-      dateStr: formatVNDate(now),
+      dateStr: dateKeyToVN(activeDateKey),
       timeStr: formatVNTime(now),
       rows: sortMembersFirst(checkins).map(c => ({ ...c })),
       feeUsed: fee,
@@ -279,12 +291,25 @@ export default function App() {
       <div style={{ background: COLORS.navy }} className="px-4 pt-5 pb-4">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <div style={{ color: '#8FA3B8', fontSize: 12 }}>{formatVNDate(today)}</div>
+            <div style={{ color: activeDateKey !== todayKey ? COLORS.yellow : '#8FA3B8', fontSize: 12 }}>
+              {activeDateKey !== todayKey ? `Đang nhập: ${dateKeyToVN(activeDateKey)}` : formatVNDate(today)}
+            </div>
             <div className="score-num" style={{ color: 'white', fontSize: 20 }}>SÂN BÓNG CHUYỀN</div>
           </div>
-          <button onClick={() => setShowSettings(true)} className="p-2 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
-            <Settings2 size={18} color="#C7D3DE" />
-          </button>
+          <div className="flex items-center gap-2">
+            {activeDateKey !== todayKey && (
+              <button
+                onClick={() => setActiveDateKey(todayKey)}
+                className="px-2 py-1 rounded-full text-xs font-semibold"
+                style={{ background: COLORS.yellow, color: COLORS.navy }}
+              >
+                Hôm nay
+              </button>
+            )}
+            <button onClick={() => setShowSettings(true)} className="p-2 rounded-full" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <Settings2 size={18} color="#C7D3DE" />
+            </button>
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
           <ScoreTile label="Có mặt" value={totalPeople} color="white" />
@@ -367,7 +392,15 @@ export default function App() {
         />
       )}
       {showSettings && (
-        <SettingsModal fee={fee} setFee={setFee} waterFee={waterFee} setWaterFee={setWaterFee} onClose={() => setShowSettings(false)} onRestore={() => window.location.reload()} />
+        <SettingsModal
+          fee={fee} setFee={setFee}
+          waterFee={waterFee} setWaterFee={setWaterFee}
+          activeDateKey={activeDateKey}
+          todayKey={todayKey}
+          onSwitchDate={(key) => setActiveDateKey(key)}
+          onClose={() => setShowSettings(false)}
+          onRestore={() => window.location.reload()}
+        />
       )}
       {reportView && (
         <ReportModal
@@ -583,10 +616,11 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
   );
 }
 
-function SettingsModal({ fee, setFee, waterFee, setWaterFee, onClose, onRestore }) {
+function SettingsModal({ fee, setFee, waterFee, setWaterFee, activeDateKey, todayKey, onSwitchDate, onClose, onRestore }) {
   const [val, setVal] = useState(String(fee));
   const [waterVal, setWaterVal] = useState(String(waterFee));
   const [restoreMsg, setRestoreMsg] = useState('');
+  const [dateVal, setDateVal] = useState('');
   const fileRef = useRef(null);
 
   const exportBackup = () => {
@@ -682,6 +716,51 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, onClose, onRestore 
             <div style={{ marginTop: 8, fontSize: 12, color: restoreMsg.startsWith('✓') ? COLORS.green : COLORS.red }}>
               {restoreMsg}
             </div>
+          )}
+        </div>
+
+        {/* Past date entry */}
+        <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 16, marginTop: 4 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Nhập dữ liệu ngày khác</div>
+          <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>
+            Chuyển sang ngày quá khứ để nhập hoặc sửa dữ liệu điểm danh. Mặc định luôn là hôm nay.
+          </div>
+          {activeDateKey !== todayKey && (
+            <div style={{ background: '#FFF8E1', border: `1px solid ${COLORS.yellow}`, borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: COLORS.brown }}>
+              Đang xem: <strong>{dateKeyToVN(activeDateKey)}</strong>
+            </div>
+          )}
+          <input
+            type="date"
+            value={dateVal}
+            max={todayKey}
+            onChange={e => setDateVal(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-lg text-sm mb-2 outline-none"
+            style={{ border: `1px solid ${COLORS.line}` }}
+          />
+          <button
+            onClick={() => {
+              if (!dateVal) return;
+              onSwitchDate(dateVal);
+              onClose();
+            }}
+            disabled={!dateVal || dateVal === activeDateKey}
+            className="w-full py-2.5 rounded-lg text-sm font-medium mb-2"
+            style={{
+              background: (!dateVal || dateVal === activeDateKey) ? COLORS.line : COLORS.blue,
+              color: 'white',
+            }}
+          >
+            Chuyển sang ngày đã chọn
+          </button>
+          {activeDateKey !== todayKey && (
+            <button
+              onClick={() => { onSwitchDate(todayKey); onClose(); }}
+              className="w-full py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
+            >
+              Quay về hôm nay
+            </button>
           )}
         </div>
       </div>
