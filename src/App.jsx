@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, X, Download, UserPlus, Users, ClipboardList,
   Receipt, Loader2, Banknote, Landmark, ChevronLeft, Settings2,
-  ListPlus, Pencil, Trash2, Lock, LockOpen
+  ListPlus, Pencil, Trash2, Lock, LockOpen, Calculator, CheckSquare, Square
 } from 'lucide-react';
 
 const COLORS = {
@@ -321,20 +321,24 @@ export default function App() {
         {tab === 'reports' && (
           <ReportsTab historyKeys={historyKeys} onOpen={loadHistoryReport} todayKey={todayKey} />
         )}
+        {tab === 'settle' && (
+          <SettlementTab historyKeys={historyKeys} />
+        )}
       </div>
 
       {/* ---- Bottom tab bar ---- */}
-      <div style={{ background: COLORS.card, borderTop: `1px solid ${COLORS.line}` }} className="fixed bottom-0 left-0 right-0 flex items-center px-2 py-2 gap-1">
-        <TabButton icon={<ClipboardList size={20} />} label="Hôm nay" active={tab === 'today'} onClick={() => setTab('today')} />
-        <TabButton icon={<Users size={20} />} label="Danh sách" active={tab === 'roster'} onClick={() => setTab('roster')} />
-        <TabButton icon={<Receipt size={20} />} label="Báo cáo" active={tab === 'reports'} onClick={() => setTab('reports')} />
+      <div style={{ background: COLORS.card, borderTop: `1px solid ${COLORS.line}` }} className="fixed bottom-0 left-0 right-0 flex items-center px-1 py-2 gap-0.5">
+        <TabButton icon={<ClipboardList size={19} />} label="Hôm nay" active={tab === 'today'} onClick={() => setTab('today')} />
+        <TabButton icon={<Users size={19} />} label="Danh sách" active={tab === 'roster'} onClick={() => setTab('roster')} />
+        <TabButton icon={<Receipt size={19} />} label="Báo cáo" active={tab === 'reports'} onClick={() => setTab('reports')} />
+        <TabButton icon={<Calculator size={19} />} label="Quyết toán" active={tab === 'settle'} onClick={() => setTab('settle')} />
         <button
           onClick={openReport}
-          className="flex flex-col items-center justify-center rounded-xl px-4 py-2 ml-1"
-          style={{ background: COLORS.yellow, minWidth: 84 }}
+          className="flex flex-col items-center justify-center rounded-xl px-2 py-2"
+          style={{ background: COLORS.yellow, minWidth: 56, flexShrink: 0 }}
         >
-          <Download size={18} color={COLORS.navy} />
-          <span style={{ fontSize: 11, fontWeight: 600, color: COLORS.navy }}>Xuất báo cáo</span>
+          <Download size={16} color={COLORS.navy} />
+          <span style={{ fontSize: 10, fontWeight: 600, color: COLORS.navy, marginTop: 2, whiteSpace: 'nowrap' }}>Xuất</span>
         </button>
       </div>
 
@@ -746,6 +750,240 @@ function ReportModal({ reportView, canvasRef, onClose, onDownload }) {
       <div className="px-4 pb-4 text-center" style={{ fontSize: 12, color: COLORS.muted }}>
         Trên iPhone: nếu nút "Tải ảnh" không tự lưu, chạm giữ vào ảnh phía trên rồi chọn "Lưu vào Ảnh".
       </div>
+    </div>
+  );
+}
+
+// ================= Settlement tab =================
+
+function SettlementTab({ historyKeys }) {
+  const [selected, setSelected] = useState(new Set());
+  const [dayData, setDayData] = useState({});
+  const [courtFeePerDay, setCourtFeePerDay] = useState(375000);
+  const [editingCourt, setEditingCourt] = useState(false);
+  const [courtInput, setCourtInput] = useState('375000');
+
+  // Load all day data from localStorage
+  useEffect(() => {
+    const data = {};
+    historyKeys.forEach(k => {
+      try {
+        const raw = localStorage.getItem(k);
+        if (raw) data[k] = JSON.parse(raw);
+      } catch {}
+    });
+    setDayData(data);
+  }, [historyKeys]);
+
+  const toggle = (key) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const selectRecent = (n) => setSelected(new Set(historyKeys.slice(0, n)));
+  const selectAll = () => setSelected(new Set(historyKeys));
+  const clearAll = () => setSelected(new Set());
+
+  // Totals across selected days
+  const totals = [...selected].reduce((acc, key) => {
+    const d = dayData[key];
+    if (!d) return acc;
+    const collected = (d.checkins || []).filter(c => c.paid).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const unpaid = (d.checkins || []).filter(c => !c.paid).length;
+    return {
+      collected: acc.collected + collected,
+      water: acc.water + (d.waterFeeUsed || 0),
+      days: acc.days + 1,
+      people: acc.people + (d.checkins || []).length,
+      unpaid: acc.unpaid + unpaid,
+    };
+  }, { collected: 0, water: 0, days: 0, people: 0, unpaid: 0 });
+
+  const netPool = totals.collected - totals.water;
+  const courtTotal = totals.days * courtFeePerDay;
+  const balance = netPool - courtTotal;
+
+  const saveCourt = () => {
+    const v = Number(courtInput.replace(/[^\d]/g, ''));
+    if (v > 0) setCourtFeePerDay(v);
+    setEditingCourt(false);
+  };
+
+  const formatDayLabel = (key) => {
+    const dstr = key.split(':')[1] || '';
+    const [y, mo, da] = dstr.split('-');
+    return `${da}/${mo}/${y}`;
+  };
+
+  const getDayStats = (key) => {
+    const d = dayData[key];
+    if (!d) return null;
+    const paid = (d.checkins || []).filter(c => c.paid);
+    const total = paid.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    return { total, count: (d.checkins || []).length };
+  };
+
+  return (
+    <div className="px-3 pt-3 pb-4">
+      {/* Quick-select buttons */}
+      <div className="flex gap-2 mb-3 flex-wrap">
+        <button
+          onClick={() => selectRecent(10)}
+          className="px-3 py-1.5 rounded-full text-xs font-medium"
+          style={{ background: COLORS.navy, color: 'white' }}
+        >
+          10 ngày gần nhất
+        </button>
+        <button
+          onClick={() => selectRecent(5)}
+          className="px-3 py-1.5 rounded-full text-xs font-medium"
+          style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
+        >
+          5 ngày
+        </button>
+        <button
+          onClick={selectAll}
+          className="px-3 py-1.5 rounded-full text-xs font-medium"
+          style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
+        >
+          Tất cả
+        </button>
+        <button
+          onClick={clearAll}
+          className="px-3 py-1.5 rounded-full text-xs font-medium"
+          style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.muted }}
+        >
+          Bỏ chọn
+        </button>
+      </div>
+
+      {/* Day list */}
+      {historyKeys.length === 0 ? (
+        <div className="text-center py-10" style={{ color: COLORS.muted, fontSize: 13 }}>Chưa có ngày nào được lưu.</div>
+      ) : (
+        <div className="flex flex-col gap-1.5 mb-4">
+          {historyKeys.map(k => {
+            const isSelected = selected.has(k);
+            const stats = getDayStats(k);
+            return (
+              <button
+                key={k}
+                onClick={() => toggle(k)}
+                className="flex items-center justify-between px-3 py-2.5 rounded-xl"
+                style={{
+                  background: isSelected ? '#EAF3EC' : COLORS.card,
+                  border: `1px solid ${isSelected ? COLORS.green : COLORS.line}`,
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  {isSelected
+                    ? <CheckSquare size={16} style={{ color: COLORS.green, flexShrink: 0 }} />
+                    : <Square size={16} style={{ color: COLORS.line, flexShrink: 0 }} />
+                  }
+                  <span style={{ fontWeight: 500, fontSize: 14 }}>{formatDayLabel(k)}</span>
+                </div>
+                {stats && (
+                  <span style={{ fontSize: 12, color: COLORS.muted }}>
+                    {stats.count} người · {formatMoney(stats.total)}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Summary card — only show when days selected */}
+      {totals.days > 0 && (
+        <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${COLORS.line}` }}>
+          {/* Header */}
+          <div className="px-4 py-3" style={{ background: COLORS.navy }}>
+            <div className="score-num" style={{ color: 'white', fontSize: 13 }}>
+              TỔNG KẾT {totals.days} NGÀY
+            </div>
+            <div style={{ color: '#8FA3B8', fontSize: 11, marginTop: 2 }}>
+              {totals.people} lượt người · {totals.unpaid} chưa đóng
+            </div>
+          </div>
+
+          {/* Rows */}
+          <div style={{ background: COLORS.card }}>
+            <SummaryRow label="Tổng tiền đã thu" value={formatMoney(totals.collected)} color={COLORS.green} bold />
+            <SummaryRow label="Tổng tiền nước đã trừ" value={`−${formatMoney(totals.water)}`} color={COLORS.brown} />
+            <SummaryRow
+              label="Quỹ ròng"
+              value={formatMoney(netPool)}
+              color={netPool >= 0 ? COLORS.green : COLORS.red}
+              bold
+              highlight
+            />
+
+            {/* Court fee row — editable */}
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: `2px dashed ${COLORS.line}` }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Tiền sân ({totals.days} ngày)</div>
+                {editingCourt ? (
+                  <div className="flex items-center gap-1 mt-1">
+                    <input
+                      autoFocus
+                      value={courtInput}
+                      onChange={e => setCourtInput(e.target.value.replace(/[^\d]/g, ''))}
+                      onBlur={saveCourt}
+                      onKeyDown={e => e.key === 'Enter' && saveCourt()}
+                      inputMode="numeric"
+                      className="px-2 py-1 rounded text-xs outline-none"
+                      style={{ width: 96, border: `1px solid ${COLORS.blue}`, color: COLORS.text }}
+                    />
+                    <span style={{ fontSize: 11, color: COLORS.muted }}>đ/ngày</span>
+                  </div>
+                ) : (
+                  <button onClick={() => { setCourtInput(String(courtFeePerDay)); setEditingCourt(true); }} style={{ fontSize: 11, color: COLORS.blue, marginTop: 2 }}>
+                    {formatMoney(courtFeePerDay)}/ngày · chỉnh
+                  </button>
+                )}
+              </div>
+              <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.red }}>
+                −{formatMoney(courtTotal)}
+              </span>
+            </div>
+
+            {/* Final balance */}
+            <div
+              className="px-4 py-4 flex items-center justify-between"
+              style={{ background: balance >= 0 ? '#EAF3EC' : '#FBEEEE' }}
+            >
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
+                  {balance >= 0 ? 'Quỹ còn dư' : 'CÒN THIẾU CHỦ SÂN'}
+                </div>
+                {balance < 0 && (
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                    Cần bù thêm từ quỹ hoặc thu thêm
+                  </div>
+                )}
+              </div>
+              <span style={{ fontSize: 22, fontWeight: 700, color: balance >= 0 ? COLORS.green : COLORS.red }} className="score-num">
+                {balance < 0 ? '' : '+'}{formatMoney(balance)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, color, bold, highlight }) {
+  return (
+    <div
+      className="flex items-center justify-between px-4 py-2.5"
+      style={{ borderTop: `1px solid ${COLORS.line}`, background: highlight ? '#F7FAF8' : 'transparent' }}
+    >
+      <span style={{ fontSize: 13, fontWeight: bold ? 600 : 400, color: COLORS.text }}>{label}</span>
+      <span style={{ fontSize: 14, fontWeight: bold ? 700 : 500, color }}>{value}</span>
     </div>
   );
 }
