@@ -34,7 +34,7 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          BASE_PATH: /volleyball-checkin/
+          BASE_PATH: /PunctualChecking/
 
       - uses: actions/configure-pages@v5
 
