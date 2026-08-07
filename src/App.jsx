@@ -34,10 +34,13 @@ function sortMembersFirst(list) {
 }
 
 const DEFAULT_MEMBERS = [
-  'Duy Hàng Không', 'Huy HK', 'Huy ĐN', 'Định ĐN', 'Bảo nhỏ', 'Phúc XM',
-  'Tuấn Bô', 'Hùng Dơi', 'A.Long', 'Chú Huy', 'H.Hai', 'Kim Xuân Tiến',
-  'Bình Xuyên', 'Trung Trực', 'Đại Q8', 'A.Phương', 'M.Trường Q8',
-  'Mắt kính', 'Bé Ngọc', 'Đạt La', 'Thiên Phúc (12)',
+  'Duy Hàng Không', 'Huy Hàng Không', 'Huy hifriendz', 'Định ĐN', 'Bảo nhỏ',
+  'Phúc XM', 'Tuấn Bô', 'Hùng Dơi', 'A.Long', 'Chú Huy',
+  'Hoàng Hải', 'Kim Xuân Tiến', 'Bình Xuyên', 'Trung Trực', 'Đại Q8',
+  'A.Phương', 'M.Trường Q8', 'Phương nhà gần', 'Bé Ngọc', 'Đạt La',
+  'Thiên Phúc (12)', 'Anh Quần Jean', 'Anh Hải ACB', 'Hào Nhỏ', 'Hải Bánh',
+  'Phạm Dũng', 'Tân Em', 'Hiếu Cá', 'Anh Tâm thợ may', 'Hữu Vinh',
+  'Anh Tuấn lớn', 'Gia Quí', 'Khoa Du Hí', 'Vũ Nhỏ',
 ].map(name => ({ id: newId('mem'), name, playCount: 0, joinedAt: Date.now() }));
 
 async function storageGet(key) {
@@ -76,6 +79,7 @@ export default function App() {
   const [importText, setImportText] = useState('');
   const [editingMember, setEditingMember] = useState(null);
   const [newName, setNewName] = useState('');
+  const [addMemberError, setAddMemberError] = useState('');
   const [reportView, setReportView] = useState(null);
   const [reportImgUrl, setReportImgUrl] = useState(null);
   const [historyKeys, setHistoryKeys] = useState([]);
@@ -144,8 +148,13 @@ export default function App() {
   const addMemberToRoster = () => {
     const name = newName.trim();
     if (!name) return;
+    if (members.some(m => normalize(m.name) === normalize(name))) {
+      setAddMemberError('Tên này đã có trong danh sách.');
+      return;
+    }
     setMembers(prev => [...prev, { id: newId('mem'), name, playCount: 0, joinedAt: Date.now() }]);
     setNewName('');
+    setAddMemberError('');
     setShowAddMember(false);
   };
 
@@ -361,6 +370,7 @@ export default function App() {
         {tab === 'roster' && (
           <RosterTab
             roster={filteredRoster}
+            totalCount={members.length}
             search={search}
             setSearch={setSearch}
             isCheckedIn={isCheckedIn}
@@ -371,7 +381,15 @@ export default function App() {
           />
         )}
         {tab === 'reports' && (
-          <ReportsTab historyKeys={historyKeys} onOpen={loadHistoryReport} todayKey={todayKey} />
+          <ReportsTab
+            historyKeys={historyKeys}
+            onOpen={loadHistoryReport}
+            todayKey={todayKey}
+            onDelete={(key) => {
+              localStorage.removeItem(key);
+              setHistoryKeys(Object.keys(localStorage).filter(k => k.startsWith('day:')).sort().reverse());
+            }}
+          />
         )}
         {tab === 'settle' && (
           <SettlementTab historyKeys={historyKeys} defaultCourtFee={courtFee} />
@@ -401,10 +419,11 @@ export default function App() {
           title="Thêm thành viên mới"
           placeholder="Tên thành viên"
           value={newName}
-          setValue={setNewName}
-          onCancel={() => { setShowAddMember(false); setNewName(''); }}
+          setValue={(v) => { setNewName(v); setAddMemberError(''); }}
+          onCancel={() => { setShowAddMember(false); setNewName(''); setAddMemberError(''); }}
           onConfirm={addMemberToRoster}
           confirmLabel="Thêm vào danh sách"
+          error={addMemberError}
         />
       )}
       {showAddGuest && (
@@ -553,13 +572,17 @@ function MethodChip({ active, color, icon, label, onClick }) {
   );
 }
 
-function RosterTab({ roster, search, setSearch, isCheckedIn, onToggle, onAddMember, onImport, onEdit }) {
+function RosterTab({ roster, totalCount, search, setSearch, isCheckedIn, onToggle, onAddMember, onImport, onEdit }) {
   return (
     <div className="px-3 pt-3">
       <div className="flex items-center gap-2 mb-3">
-        <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
-          <Search size={16} style={{ color: COLORS.muted }} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm tên..." className="flex-1 outline-none text-sm bg-transparent" />
+        <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg flex-shrink-0" style={{ background: COLORS.navy }}>
+          <Users size={13} color="white" />
+          <span className="score-num" style={{ color: 'white', fontSize: 13 }}>{totalCount}</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg flex-1 min-w-0" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
+          <Search size={14} style={{ color: COLORS.muted, flexShrink: 0 }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm tên..." className="flex-1 outline-none text-sm bg-transparent min-w-0" />
         </div>
         <button onClick={onImport} className="p-2.5 rounded-lg" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
           <ListPlus size={18} style={{ color: COLORS.text }} />
@@ -600,30 +623,80 @@ function RosterTab({ roster, search, setSearch, isCheckedIn, onToggle, onAddMemb
   );
 }
 
-function ReportsTab({ historyKeys, onOpen, todayKey }) {
+function ReportsTab({ historyKeys, onOpen, todayKey, onDelete }) {
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [deletePin, setDeletePin] = useState('');
+  const [pinError, setPinError] = useState(false);
+
+  const confirmDelete = () => {
+    if (deletePin === UNLOCK_CODE) {
+      onDelete(pendingDelete);
+      setPendingDelete(null);
+      setDeletePin('');
+      setPinError(false);
+    } else {
+      setPinError(true);
+    }
+  };
+
   return (
     <div className="px-3 pt-3">
-      <div style={{ color: COLORS.muted, fontSize: 13, marginBottom: 8 }}>Chọn một ngày để xem lại báo cáo đã lưu.</div>
+      <div style={{ color: COLORS.muted, fontSize: 13, marginBottom: 8 }}>Chọn một ngày để xem lại báo cáo. Bấm thùng rác để xoá (cần mã).</div>
       <div className="flex flex-col gap-1.5">
         {historyKeys.map(k => {
           const dstr = k.split(':')[1];
           const isToday = dstr === todayKey;
           return (
-            <button key={k} onClick={() => onOpen(k)} className="flex items-center justify-between px-3 py-3 rounded-xl" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
-              <span style={{ fontWeight: 500 }}>{dstr}{isToday && ' (hôm nay)'}</span>
-              <Receipt size={16} style={{ color: COLORS.muted }} />
-            </button>
+            <div key={k} className="flex items-center rounded-xl overflow-hidden" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
+              <button onClick={() => onOpen(k)} className="flex-1 flex items-center justify-between px-3 py-3">
+                <span style={{ fontWeight: 500 }}>{dateKeyToVN(dstr)}{isToday && ' (hôm nay)'}</span>
+                <Receipt size={16} style={{ color: COLORS.muted }} />
+              </button>
+              <button
+                onClick={() => { setPendingDelete(k); setDeletePin(''); setPinError(false); }}
+                className="px-3 py-3 border-l"
+                style={{ borderColor: COLORS.line }}
+              >
+                <Trash2 size={15} style={{ color: COLORS.red }} />
+              </button>
+            </div>
           );
         })}
         {historyKeys.length === 0 && (
           <div className="text-center py-10" style={{ color: COLORS.muted, fontSize: 13 }}>Chưa có báo cáo nào được lưu.</div>
         )}
       </div>
+
+      {/* Delete confirmation mini-modal */}
+      {pendingDelete && (
+        <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={() => setPendingDelete(null)}>
+          <div onClick={e => e.stopPropagation()} className="w-full rounded-t-2xl p-5" style={{ background: COLORS.card, maxWidth: 480 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Xoá báo cáo ngày {dateKeyToVN(pendingDelete.split(':')[1])}?</div>
+            <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>Nhập mã để xác nhận. Dữ liệu sẽ bị xoá vĩnh viễn khỏi máy.</div>
+            <input
+              autoFocus
+              value={deletePin}
+              onChange={e => { setDeletePin(e.target.value.replace(/[^\d]/g, '').slice(0, 4)); setPinError(false); }}
+              inputMode="numeric"
+              type="password"
+              placeholder="Mã 4 số"
+              className="w-full px-3 py-2.5 rounded-lg text-sm mb-1 outline-none"
+              style={{ border: `1px solid ${pinError ? COLORS.red : COLORS.line}` }}
+            />
+            {pinError && <div style={{ color: COLORS.red, fontSize: 11, marginBottom: 6 }}>Sai mã, thử lại.</div>}
+            {!pinError && <div style={{ marginBottom: 10 }} />}
+            <div className="flex gap-2">
+              <button onClick={() => setPendingDelete(null)} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>Huỷ</button>
+              <button onClick={confirmDelete} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.red, color: 'white' }}>Xoá</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, confirmLabel, hint }) {
+function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, confirmLabel, hint, error }) {
   return (
     <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={onCancel}>
       <div onClick={e => e.stopPropagation()} className="w-full rounded-t-2xl p-5" style={{ background: COLORS.card, maxWidth: 480 }}>
@@ -634,9 +707,11 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
           value={value}
           onChange={e => setValue(e.target.value)}
           placeholder={placeholder}
-          className="w-full px-3 py-2.5 rounded-lg text-sm mb-3 outline-none"
-          style={{ border: `1px solid ${COLORS.line}` }}
+          className="w-full px-3 py-2.5 rounded-lg text-sm mb-1 outline-none"
+          style={{ border: `1px solid ${error ? COLORS.red : COLORS.line}` }}
         />
+        {error && <div style={{ color: COLORS.red, fontSize: 12, marginBottom: 8 }}>{error}</div>}
+        {!error && <div style={{ marginBottom: 10 }} />}
         <div className="flex gap-2">
           <button onClick={onCancel} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>Huỷ</button>
           <button onClick={onConfirm} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.blue, color: 'white' }}>{confirmLabel}</button>
@@ -976,6 +1051,7 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
   const [courtFeePerDay, setCourtFeePerDay] = useState(defaultCourtFee);
   const [editingCourt, setEditingCourt] = useState(false);
   const [courtInput, setCourtInput] = useState(String(defaultCourtFee));
+  const settlementCanvasRef = useRef(null);
 
   // Load all day data from localStorage
   useEffect(() => {
@@ -1024,6 +1100,30 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
     const v = Number(courtInput.replace(/[^\d]/g, ''));
     if (v > 0) setCourtFeePerDay(v);
     setEditingCourt(false);
+  };
+
+  const exportSettlementImage = () => {
+    if (!settlementCanvasRef.current || totals.days === 0) return;
+    const canvas = settlementCanvasRef.current;
+    const selectedDates = [...selected].sort().map(k => dateKeyToVN(k.split(':')[1]));
+    drawSettlement(canvas, { selectedDates, totals, netPool, courtFeePerDay, courtTotal, balance });
+    const filename = `quyet-toan-${totals.days}ngay.png`;
+    if (navigator.canShare) {
+      canvas.toBlob(async (blob) => {
+        const file = new File([blob], filename, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          try { await navigator.share({ files: [file], title: `Quyết toán ${totals.days} ngày` }); return; }
+          catch (e) { if (e.name === 'AbortError') return; }
+        }
+        const url = canvas.toDataURL('image/png');
+        const a = document.createElement('a'); a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      }, 'image/png');
+    } else {
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
   };
 
   const formatDayLabel = (key) => {
@@ -1203,8 +1303,21 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
               </span>
             </div>
           </div>
+
+          {/* Export button */}
+          <button
+            onClick={exportSettlementImage}
+            className="w-full flex items-center justify-center gap-2 py-3"
+            style={{ background: COLORS.yellow }}
+          >
+            <Download size={16} color={COLORS.navy} />
+            <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.navy }}>Xuất ảnh quyết toán</span>
+          </button>
         </div>
       )}
+
+      {/* Hidden canvas for settlement export */}
+      <canvas ref={settlementCanvasRef} style={{ display: 'none' }} />
     </div>
   );
 }
@@ -1403,4 +1516,106 @@ function drawReport(canvas, reportView) {
   ctx.font = '400 11px Inter, sans-serif';
   ctx.fillStyle = C.muted;
   ctx.fillText(`Xuất file lúc ${timeStr} ${dateStr}`, width / 2, y);
+}
+
+function drawSettlement(canvas, { selectedDates, totals, netPool, courtFeePerDay, courtTotal, balance }) {
+  const scale = 2;
+  const width = 480;
+  const now = new Date();
+  const C = {
+    dark: '#1C2321', muted: '#7C8580', green: '#2E8B57', red: '#C0392B',
+    line: '#E4E1DA', navy: '#1C2B3A', yellow: '#F2B705', brown: '#8C6A46',
+  };
+
+  const rowH = 30;
+  const dateRows = Math.ceil(selectedDates.length / 3);
+  const height = 70 + dateRows * rowH + 280;
+  canvas.width = width * scale;
+  canvas.height = height * scale;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, width, height);
+
+  // Header
+  ctx.fillStyle = C.navy;
+  ctx.fillRect(0, 0, width, 60);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '700 18px Oswald, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`QUYẾT TOÁN ${totals.days} NGÀY`, width / 2, 28);
+  ctx.font = '400 12px Inter, sans-serif';
+  ctx.fillStyle = '#B9C6D1';
+  ctx.fillText(`${totals.people} lượt người · ${totals.unpaid} chưa đóng`, width / 2, 48);
+
+  // Dates grid
+  let y = 72;
+  ctx.textAlign = 'left';
+  ctx.font = '400 11px Inter, sans-serif';
+  ctx.fillStyle = C.muted;
+  const cols = 3;
+  const colW = (width - 32) / cols;
+  selectedDates.forEach((d, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    ctx.fillStyle = '#2C6E9B22';
+    const rx = 16 + col * colW, ry = y + row * rowH;
+    ctx.fillRect(rx, ry - 14, colW - 4, 22);
+    ctx.fillStyle = C.dark;
+    ctx.font = '500 11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(d, rx + colW / 2 - 2, ry - 1);
+  });
+
+  y += dateRows * rowH + 12;
+  ctx.textAlign = 'left';
+
+  // Separator
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(16, y); ctx.lineTo(width - 16, y); ctx.stroke();
+  y += 20;
+
+  const sLine = (label, value, color, bold) => {
+    ctx.font = bold ? '700 14px Inter, sans-serif' : '400 13px Inter, sans-serif';
+    ctx.fillStyle = C.dark; ctx.textAlign = 'left';
+    ctx.fillText(label, 24, y);
+    ctx.fillStyle = color; ctx.textAlign = 'right';
+    ctx.fillText(value, width - 24, y);
+    y += 26;
+  };
+
+  sLine('Tổng tiền đã thu', formatMoney(totals.collected), C.green, true);
+  sLine('Tổng tiền nước', '−' + formatMoney(totals.water), C.brown, false);
+
+  y += 4;
+  ctx.strokeStyle = C.line;
+  ctx.beginPath(); ctx.moveTo(16, y - 4); ctx.lineTo(width - 16, y - 4); ctx.stroke();
+
+  sLine('Quỹ ròng (sau trừ nước)', formatMoney(netPool), netPool >= 0 ? C.green : C.red, true);
+  sLine(`Tiền sân (${totals.days} ngày × ${formatMoney(courtFeePerDay)})`, '−' + formatMoney(courtTotal), C.red, false);
+
+  y += 4;
+  ctx.strokeStyle = C.line;
+  ctx.beginPath(); ctx.moveTo(16, y - 4); ctx.lineTo(width - 16, y - 4); ctx.stroke();
+
+  // Final balance box
+  ctx.fillStyle = balance >= 0 ? '#EAF3EC' : '#FBEEEE';
+  ctx.fillRect(16, y, width - 32, 50);
+  ctx.font = '600 12px Inter, sans-serif';
+  ctx.fillStyle = C.dark; ctx.textAlign = 'left';
+  ctx.fillText(balance >= 0 ? 'Quỹ còn dư' : 'CÒN THIẾU CHỦ SÂN', 28, y + 20);
+  ctx.font = '700 20px Oswald, sans-serif';
+  ctx.fillStyle = balance >= 0 ? C.green : C.red; ctx.textAlign = 'right';
+  ctx.fillText((balance < 0 ? '−' : '+') + formatMoney(Math.abs(balance)), width - 28, y + 34);
+  y += 64;
+
+  ctx.strokeStyle = C.line;
+  ctx.beginPath(); ctx.moveTo(16, y); ctx.lineTo(width - 16, y); ctx.stroke();
+  y += 18;
+  ctx.textAlign = 'center';
+  ctx.font = '400 10px Inter, sans-serif';
+  ctx.fillStyle = C.muted;
+  const t = now;
+  ctx.fillText(`Xuất lúc ${pad(t.getHours())}:${pad(t.getMinutes())} ${pad(t.getDate())}/${pad(t.getMonth()+1)}/${t.getFullYear()}`, width / 2, y);
 }
