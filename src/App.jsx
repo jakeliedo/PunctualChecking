@@ -62,6 +62,7 @@ export default function App() {
   const [members, setMembers] = useState([]);
   const [fee, setFee] = useState(DEFAULT_FEE);
   const [waterFee, setWaterFee] = useState(15000);
+  const [courtFee, setCourtFee] = useState(375000);
   const [today] = useState(new Date());
   const todayKey = dateKeyOf(today);
   const [activeDateKey, setActiveDateKey] = useState(todayKey);
@@ -76,6 +77,7 @@ export default function App() {
   const [editingMember, setEditingMember] = useState(null);
   const [newName, setNewName] = useState('');
   const [reportView, setReportView] = useState(null);
+  const [reportImgUrl, setReportImgUrl] = useState(null);
   const [historyKeys, setHistoryKeys] = useState([]);
   const canvasRef = useRef(null);
 
@@ -89,6 +91,7 @@ export default function App() {
       setMembers(loadedMembers.map(x => ({ ...x, joinedAt: x.joinedAt || Date.now() })));
       setFee(f?.fee || DEFAULT_FEE);
       setWaterFee(f?.waterFee ?? 15000);
+      setCourtFee(f?.courtFee ?? 375000);
       setCheckins(day?.checkins || []);
       const keys = Object.keys(localStorage)
         .filter(k => k.startsWith('day:'))
@@ -111,10 +114,10 @@ export default function App() {
 
   // ---------- Persist ----------
   useEffect(() => { if (!loading) storageSet('members', members); }, [members, loading]);
-  useEffect(() => { if (!loading) storageSet('fee-config', { fee, waterFee }); }, [fee, waterFee, loading]);
+  useEffect(() => { if (!loading) storageSet('fee-config', { fee, waterFee, courtFee }); }, [fee, waterFee, courtFee, loading]);
   useEffect(() => {
     if (!loading) {
-      storageSet(`day:${activeDateKey}`, { checkins, waterFeeUsed: waterFee, savedAt: Date.now() });
+      storageSet(`day:${activeDateKey}`, { checkins, waterFeeUsed: waterFee, courtFeeUsed: courtFee, savedAt: Date.now() });
       setHistoryKeys(
         Object.keys(localStorage).filter(k => k.startsWith('day:')).sort().reverse()
       );
@@ -238,6 +241,7 @@ export default function App() {
       rows: sortMembersFirst(checkins).map(c => ({ ...c })),
       feeUsed: fee,
       waterFeeUsed: waterFee,
+      courtFeeUsed: courtFee,
     });
   };
 
@@ -252,6 +256,7 @@ export default function App() {
       rows: sortMembersFirst(rec.checkins || []),
       feeUsed: fee,
       waterFeeUsed: rec.waterFeeUsed ?? waterFee,
+      courtFeeUsed: rec.courtFeeUsed ?? courtFee,
     });
   };
 
@@ -259,16 +264,36 @@ export default function App() {
   useEffect(() => {
     if (!reportView || !canvasRef.current) return;
     drawReport(canvasRef.current, reportView);
+    setReportImgUrl(canvasRef.current.toDataURL('image/png'));
   }, [reportView]);
 
   const downloadImage = () => {
-    if (!canvasRef.current) return;
-    const url = canvasRef.current.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bao-cao-${reportView.dateStr.replaceAll('/', '-')}.png`;
-    a.click();
+    if (!canvasRef.current || !reportView) return;
+    const canvas = canvasRef.current;
+    const filename = `bao-cao-${reportView.dateStr.replaceAll('/', '-')}.png`;
+    // iOS: use Web Share API with file → triggers native Share Sheet → "Lưu vào Ảnh"
+    if (navigator.canShare) {
+      canvas.toBlob(async (blob) => {
+        const file = new File([blob], filename, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          try { await navigator.share({ files: [file], title: `Phiếu thu ${reportView.dateStr}` }); return; }
+          catch (e) { if (e.name === 'AbortError') return; }
+        }
+        fallbackDownload(canvas.toDataURL('image/png'), filename);
+      }, 'image/png');
+    } else {
+      fallbackDownload(canvas.toDataURL('image/png'), filename);
+    }
   };
+
+  function fallbackDownload(dataUrl, filename) {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
 
   if (loading) {
     return (
@@ -349,7 +374,7 @@ export default function App() {
           <ReportsTab historyKeys={historyKeys} onOpen={loadHistoryReport} todayKey={todayKey} />
         )}
         {tab === 'settle' && (
-          <SettlementTab historyKeys={historyKeys} />
+          <SettlementTab historyKeys={historyKeys} defaultCourtFee={courtFee} />
         )}
       </div>
 
@@ -398,6 +423,7 @@ export default function App() {
         <SettingsModal
           fee={fee} setFee={setFee}
           waterFee={waterFee} setWaterFee={setWaterFee}
+          courtFee={courtFee} setCourtFee={setCourtFee}
           activeDateKey={activeDateKey}
           todayKey={todayKey}
           onSwitchDate={(key) => setActiveDateKey(key)}
@@ -409,7 +435,8 @@ export default function App() {
         <ReportModal
           reportView={reportView}
           canvasRef={canvasRef}
-          onClose={() => setReportView(null)}
+          imgUrl={reportImgUrl}
+          onClose={() => { setReportView(null); setReportImgUrl(null); }}
           onDownload={downloadImage}
         />
       )}
@@ -619,9 +646,10 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
   );
 }
 
-function SettingsModal({ fee, setFee, waterFee, setWaterFee, activeDateKey, todayKey, onSwitchDate, onClose, onRestore }) {
+function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtFee, activeDateKey, todayKey, onSwitchDate, onClose, onRestore }) {
   const [val, setVal] = useState(String(fee));
   const [waterVal, setWaterVal] = useState(String(waterFee));
+  const [courtVal, setCourtVal] = useState(String(courtFee));
   const [restoreMsg, setRestoreMsg] = useState('');
   const [dateVal, setDateVal] = useState('');
   const fileRef = useRef(null);
@@ -676,7 +704,7 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, activeDateKey, toda
           style={{ border: `1px solid ${COLORS.line}` }}
         />
         <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Tiền nước mỗi ngày</div>
-        <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 6 }}>Tự động cộng vào phiếu thu như một khoản chi phí cố định.</div>
+        <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 6 }}>Trừ vào quỹ như chi phí cố định trong phiếu thu và báo cáo.</div>
         <input
           inputMode="numeric"
           value={waterVal}
@@ -684,8 +712,22 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, activeDateKey, toda
           className="w-full px-3 py-2.5 rounded-lg text-sm mb-4 outline-none"
           style={{ border: `1px solid ${COLORS.line}` }}
         />
+        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Tiền sân mỗi buổi</div>
+        <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 6 }}>Trừ vào quỹ trong phiếu thu. Dùng làm mặc định cho tab Quyết toán.</div>
+        <input
+          inputMode="numeric"
+          value={courtVal}
+          onChange={e => setCourtVal(e.target.value.replace(/[^\d]/g, ''))}
+          className="w-full px-3 py-2.5 rounded-lg text-sm mb-4 outline-none"
+          style={{ border: `1px solid ${COLORS.line}` }}
+        />
         <button
-          onClick={() => { setFee(Number(val) || DEFAULT_FEE); setWaterFee(Number(waterVal) || 0); onClose(); }}
+          onClick={() => {
+            setFee(Number(val) || DEFAULT_FEE);
+            setWaterFee(Number(waterVal) || 0);
+            setCourtFee(Number(courtVal) || 0);
+            onClose();
+          }}
           className="w-full py-2.5 rounded-lg text-sm font-medium mb-4"
           style={{ background: COLORS.blue, color: 'white' }}
         >
@@ -884,24 +926,43 @@ function EditMemberModal({ member, onCancel, onSave, onDelete }) {
   );
 }
 
-function ReportModal({ reportView, canvasRef, onClose, onDownload }) {
-  const { dateStr, timeStr } = reportView;
+function ReportModal({ reportView, canvasRef, imgUrl, onClose, onDownload }) {
+  const { dateStr } = reportView;
   return (
     <div className="fixed inset-0 flex flex-col z-50" style={{ background: COLORS.ivory }}>
-      <div className="flex items-center justify-between px-4 py-3" style={{ background: COLORS.navy }}>
+      {/* Header — safe-area so buttons clear iPhone notch */}
+      <div
+        style={{
+          background: COLORS.navy,
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          paddingBottom: 12,
+          paddingLeft: 16,
+          paddingRight: 16,
+        }}
+        className="flex items-center justify-between"
+      >
         <button onClick={onClose} className="flex items-center gap-1" style={{ color: 'white' }}>
           <ChevronLeft size={20} /> <span style={{ fontSize: 14 }}>Đóng</span>
         </button>
         <span className="score-num" style={{ color: 'white', fontSize: 14 }}>PHIẾU THU {dateStr}</span>
         <button onClick={onDownload} className="flex items-center gap-1 px-3 py-1.5 rounded-full" style={{ background: COLORS.yellow, color: COLORS.navy, fontSize: 13, fontWeight: 600 }}>
-          <Download size={14} /> Tải ảnh
+          <Download size={14} /> Lưu ảnh
         </button>
       </div>
+
+      {/* Canvas hidden — needed for drawing + download */}
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+      {/* Show as <img> so long-press "Lưu vào Ảnh" works on iOS */}
       <div className="flex-1 overflow-auto flex justify-center p-4">
-        <canvas ref={canvasRef} style={{ width: '100%', maxWidth: 460, height: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }} />
+        {imgUrl
+          ? <img src={imgUrl} alt="Phiếu thu" style={{ width: '100%', maxWidth: 460, height: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', display: 'block' }} />
+          : <div className="flex items-center justify-center w-full" style={{ color: COLORS.muted, fontSize: 13 }}>Đang vẽ...</div>
+        }
       </div>
-      <div className="px-4 pb-4 text-center" style={{ fontSize: 12, color: COLORS.muted }}>
-        Trên iPhone: nếu nút "Tải ảnh" không tự lưu, chạm giữ vào ảnh phía trên rồi chọn "Lưu vào Ảnh".
+
+      <div className="px-4 text-center" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)', fontSize: 12, color: COLORS.muted }}>
+        iPhone: bấm "Lưu ảnh" để mở Share Sheet → chọn "Lưu vào Ảnh". Hoặc chạm giữ ảnh → "Add to Photos".
       </div>
     </div>
   );
@@ -909,12 +970,12 @@ function ReportModal({ reportView, canvasRef, onClose, onDownload }) {
 
 // ================= Settlement tab =================
 
-function SettlementTab({ historyKeys }) {
+function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
   const [selected, setSelected] = useState(new Set());
   const [dayData, setDayData] = useState({});
-  const [courtFeePerDay, setCourtFeePerDay] = useState(375000);
+  const [courtFeePerDay, setCourtFeePerDay] = useState(defaultCourtFee);
   const [editingCourt, setEditingCourt] = useState(false);
-  const [courtInput, setCourtInput] = useState('375000');
+  const [courtInput, setCourtInput] = useState(String(defaultCourtFee));
 
   // Load all day data from localStorage
   useEffect(() => {
@@ -1163,13 +1224,18 @@ function SummaryRow({ label, value, color, bold, highlight }) {
 // ================= Canvas drawing =================
 
 function drawReport(canvas, reportView) {
-  const { dateStr, timeStr, rows, feeUsed, waterFeeUsed = 0 } = reportView;
+  const { dateStr, timeStr, rows, feeUsed, waterFeeUsed = 0, courtFeeUsed = 0 } = reportView;
   const scale = 2;
   const width = 480;
   const rowH = 34;
   const headerH = 150;
   const hasGuestRow = rows.some(r => r.isGuest);
-  const footerH = 170 + (hasGuestRow ? 20 : 0) + (waterFeeUsed > 0 ? 56 : 0);
+  const showDeductions = waterFeeUsed > 0 || courtFeeUsed > 0;
+  const footerH = 170
+    + (hasGuestRow ? 20 : 0)
+    + (waterFeeUsed > 0 ? 28 : 0)
+    + (courtFeeUsed > 0 ? 28 : 0)
+    + (showDeductions ? 56 : 0);
   const height = headerH + rowH * (rows.length + 1) + footerH;
 
   canvas.width = width * scale;
@@ -1284,19 +1350,33 @@ function drawReport(canvas, reportView) {
   ctx.fillText(formatMoney(owed), width - 24, y);
   y += 32;
 
-  if (waterFeeUsed > 0) {
+  if (showDeductions) {
     ctx.strokeStyle = C.line;
     ctx.beginPath(); ctx.moveTo(16, y - 12); ctx.lineTo(width - 16, y - 12); ctx.stroke();
-    ctx.textAlign = 'left';
-    ctx.font = '400 13px Inter, sans-serif';
-    ctx.fillStyle = C.muted;
-    ctx.fillText('Tiền nước (chi phí cố định)', 24, y);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#B0651B';
-    ctx.fillText('-' + formatMoney(waterFeeUsed), width - 24, y);
-    y += 28;
 
-    const net = total - waterFeeUsed;
+    if (waterFeeUsed > 0) {
+      ctx.textAlign = 'left';
+      ctx.font = '400 13px Inter, sans-serif';
+      ctx.fillStyle = C.muted;
+      ctx.fillText('Tiền nước (chi phí cố định)', 24, y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#B0651B';
+      ctx.fillText('-' + formatMoney(waterFeeUsed), width - 24, y);
+      y += 28;
+    }
+
+    if (courtFeeUsed > 0) {
+      ctx.textAlign = 'left';
+      ctx.font = '400 13px Inter, sans-serif';
+      ctx.fillStyle = C.muted;
+      ctx.fillText('Tiền sân (chi phí cố định)', 24, y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = C.red;
+      ctx.fillText('-' + formatMoney(courtFeeUsed), width - 24, y);
+      y += 28;
+    }
+
+    const net = total - waterFeeUsed - courtFeeUsed;
     ctx.textAlign = 'left';
     ctx.font = '700 15px Inter, sans-serif';
     ctx.fillStyle = C.dark;
