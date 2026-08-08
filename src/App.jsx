@@ -143,9 +143,13 @@ export default function App() {
 
   const totalPeople = checkins.length;
   const paidList = checkins.filter(c => c.paid);
-  const unpaidList = checkins.filter(c => !c.paid && !c.paidBy);
+  // Someone still owes if: (own fee not covered OR covers others) AND hasn't paid yet
+  const unpaidList = checkins.filter(c => !c.paid && (!c.paidBy || (c.paidForNames || []).length > 0));
   const totalCollected = paidList.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  const totalOwed = unpaidList.reduce((s, c) => s + fee * (1 + (c.paidForNames || []).length), 0);
+  const totalOwed = unpaidList.reduce((s, c) => {
+    const ownContrib = c.paidBy ? 0 : 1;
+    return s + fee * (ownContrib + (c.paidForNames || []).length);
+  }, 0);
 
   // ---------- Handlers ----------
   const addMemberToRoster = () => {
@@ -248,9 +252,10 @@ export default function App() {
       if (c.id !== id) return c;
       if (c.paid && c.method === method) return { ...c, paid: false, method: null, amount: 0 };
       const numCovered = (c.paidForNames || []).length;
-      const effectiveFee = fee * (1 + numCovered);
-      // Keep custom amount only if person covers nobody and already has a non-default amount
-      const amount = (numCovered === 0 && c.amount > 0 && c.amount !== fee) ? c.amount : effectiveFee;
+      const ownContrib = c.paidBy ? 0 : 1; // 0 if own fee is covered by someone else
+      const effectiveFee = fee * (ownContrib + numCovered);
+      // Keep custom only for plain uncovered people with no coverage obligations
+      const amount = (ownContrib === 1 && numCovered === 0 && c.amount > 0 && c.amount !== fee) ? c.amount : effectiveFee;
       return { ...c, paid: true, method, amount };
     }));
   };
@@ -272,8 +277,10 @@ export default function App() {
       // Step 2: recalc old payer's amount (if already paid)
       if (oldPayerName) {
         updated = updated.map(c => {
-          if (c.name === oldPayerName && c.paid)
-            return { ...c, amount: fee * (1 + (c.paidForNames || []).length) };
+          if (c.name === oldPayerName && c.paid) {
+            const oc = c.paidBy ? 0 : 1;
+            return { ...c, amount: fee * (oc + (c.paidForNames || []).length) };
+          }
           return c;
         });
       }
@@ -289,8 +296,10 @@ export default function App() {
 
       // Step 4: recalc new payer's amount (if already paid)
       return updated.map(c => {
-        if (c.name === payerName && c.paid)
-          return { ...c, amount: fee * (1 + (c.paidForNames || []).length) };
+        if (c.name === payerName && c.paid) {
+          const oc = c.paidBy ? 0 : 1;
+          return { ...c, amount: fee * (oc + (c.paidForNames || []).length) };
+        }
         return c;
       });
     });
@@ -597,18 +606,20 @@ function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAdd
           const isCovered = !!c.paidBy;
           const paidForNames = c.paidForNames || [];
           const isActivePayer = paidForNames.length > 0;
+          // Truly inactive only if covered AND owes nothing (no one to pay for)
+          const isFullyCovered = isCovered && !isActivePayer;
           const payForActive = isCovered || isActivePayer;
           return (
             <div key={c.id} className="rounded-xl p-3" style={{
               background: COLORS.card,
-              border: `1px solid ${isCovered ? COLORS.line : COLORS.line}`,
-              opacity: isCovered ? 0.65 : 1,
+              border: `1px solid ${COLORS.line}`,
+              opacity: isFullyCovered ? 0.65 : 1,
             }}>
               {/* Name row */}
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2 min-w-0">
                   <span style={{ color: COLORS.muted, fontSize: 12, minWidth: 20 }}>{idx + 1}.</span>
-                  <span className="truncate" style={{ fontWeight: 600, fontSize: 15, color: isCovered ? COLORS.muted : COLORS.text }}>
+                  <span className="truncate" style={{ fontWeight: 600, fontSize: 15, color: isFullyCovered ? COLORS.muted : COLORS.text }}>
                     {c.name}
                   </span>
                   {c.isGuest && <span style={{ fontSize: 10, color: COLORS.brown, background: '#F3E9DD', padding: '2px 6px', borderRadius: 6 }}>Vãng lai</span>}
@@ -629,7 +640,7 @@ function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAdd
               )}
 
               {/* Payment row */}
-              {isCovered ? (
+              {isFullyCovered ? (
                 <div className="flex items-center gap-2">
                   <span style={{ fontSize: 12, color: COLORS.muted }}>Được trả thay</span>
                   <button onClick={() => onPayFor(c.id)} className="flex items-center justify-center rounded-xl" style={{
@@ -1611,9 +1622,10 @@ function drawReport(canvas, reportView) {
   rows.forEach((r, idx) => {
     const isCovered = !!r.paidBy;
     const paidForNames = r.paidForNames || [];
+    const isFullyCovered = isCovered && paidForNames.length === 0;
     const rowTotal = rowH + (isCovered ? noteH : 0) + (paidForNames.length > 0 ? noteH : 0);
 
-    if (isCovered) {
+    if (isFullyCovered) {
       ctx.fillStyle = '#F5F5F3';
       ctx.fillRect(16, y, width - 32, rowTotal);
     } else if (!r.paid) {
@@ -1621,7 +1633,7 @@ function drawReport(canvas, reportView) {
       ctx.fillRect(16, y, width - 32, rowTotal);
     }
 
-    const color = isCovered ? C.muted : (r.paid ? C.dark : C.red);
+    const color = isFullyCovered ? C.muted : (r.paid ? C.dark : C.red);
     ctx.fillStyle = C.muted;
     ctx.font = '400 12px Inter, sans-serif';
     ctx.fillText(String(idx + 1), 26, y + rowH / 2 + 4);
@@ -1629,14 +1641,14 @@ function drawReport(canvas, reportView) {
     ctx.font = '500 12px Inter, sans-serif';
     const name = r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name;
     ctx.fillText(name, 64, y + rowH / 2 + 4);
-    ctx.fillStyle = isCovered ? C.muted : (r.paid ? C.green : C.red);
+    ctx.fillStyle = isFullyCovered ? C.muted : (r.paid ? C.green : C.red);
     ctx.font = '600 12px Inter, sans-serif';
-    const statusLabel = isCovered ? '↙ Được trả thay' : (r.paid ? '✓ Đã đóng' : '✗ Chưa đóng');
+    const statusLabel = isFullyCovered ? '↙ Được trả thay' : (r.paid ? '✓ Đã đóng' : '✗ Chưa đóng');
     ctx.fillText(statusLabel, 290, y + rowH / 2 + 4);
     ctx.textAlign = 'right';
     ctx.fillStyle = color;
     ctx.font = '400 12px Inter, sans-serif';
-    const amountLabel = isCovered ? '0đ' : (r.paid ? formatMoney(r.amount) : '—');
+    const amountLabel = isFullyCovered ? '0đ' : (r.paid ? formatMoney(r.amount) : '—');
     ctx.fillText(amountLabel, width - 26, y + rowH / 2 + 4);
     ctx.textAlign = 'left';
     y += rowH;
@@ -1662,10 +1674,16 @@ function drawReport(canvas, reportView) {
   });
 
   y += 16;
-  const paidCount = rows.filter(r => r.paid || r.paidBy).length;
-  const unpaidCount = rows.filter(r => !r.paid && !r.paidBy).length;
+  // Settled = paid themselves OR fully covered with no obligations
+  const paidCount = rows.filter(r => r.paid || (r.paidBy && (r.paidForNames || []).length === 0)).length;
+  const unpaidCount = rows.filter(r => !r.paid && (!r.paidBy || (r.paidForNames || []).length > 0)).length;
   const total = rows.filter(r => r.paid).reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const owed = rows.filter(r => !r.paid && !r.paidBy).reduce((s, r) => s + feeUsed * (1 + (r.paidForNames || []).length), 0);
+  const owed = rows
+    .filter(r => !r.paid && (!r.paidBy || (r.paidForNames || []).length > 0))
+    .reduce((s, r) => {
+      const oc = r.paidBy ? 0 : 1;
+      return s + feeUsed * (oc + (r.paidForNames || []).length);
+    }, 0);
 
   const summaryLine = (label, value, color) => {
     ctx.textAlign = 'left';
