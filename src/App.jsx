@@ -979,46 +979,44 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
   };
 
   return (
-    <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={onClose}>
-      <div
-        onClick={e => e.stopPropagation()}
-        className="w-full rounded-t-2xl flex flex-col"
-        style={{ background: COLORS.card, maxWidth: 480, maxHeight: '90vh', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-      >
-        {/* Fixed header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 flex-shrink-0">
-          <span style={{ fontWeight: 700, fontSize: 17 }}>Cài đặt</span>
-          <button onClick={onClose} className="p-1.5 rounded-full" style={{ background: COLORS.ivory }}>
-            <X size={18} style={{ color: COLORS.muted }} />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 flex flex-col" style={{
+      background: COLORS.ivory,
+      paddingTop: 'env(safe-area-inset-top, 0px)',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+    }}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 flex-shrink-0" style={{
+        background: COLORS.navy, height: 52,
+      }}>
+        <span className="score-num" style={{ color: 'white', fontSize: 16, letterSpacing: 0.5 }}>CÀI ĐẶT</span>
+        <button onClick={onClose} className="p-2 rounded-full" style={{ background: 'rgba(255,255,255,0.1)' }}>
+          <X size={18} color="white" />
+        </button>
+      </div>
 
-        {/* Scrollable content */}
-        <div className="overflow-y-auto px-5 pb-6" style={{ flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Phí mỗi người/buổi</div>
-          <input
-            inputMode="numeric"
-            value={val}
-            onChange={e => setVal(e.target.value.replace(/[^\d]/g, ''))}
-            className="w-full px-3 py-2.5 rounded-lg text-sm mb-4 outline-none"
-            style={{ border: `1px solid ${COLORS.line}` }}
-          />
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Tiền nước mỗi ngày</div>
-          <input
-            inputMode="numeric"
-            value={waterVal}
-            onChange={e => setWaterVal(e.target.value.replace(/[^\d]/g, ''))}
-            className="w-full px-3 py-2.5 rounded-lg text-sm mb-4 outline-none"
-            style={{ border: `1px solid ${COLORS.line}` }}
-          />
-          <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Tiền sân mỗi buổi</div>
-          <input
-            inputMode="numeric"
-            value={courtVal}
-            onChange={e => setCourtVal(e.target.value.replace(/[^\d]/g, ''))}
-            className="w-full px-3 py-2.5 rounded-lg text-sm mb-4 outline-none"
-            style={{ border: `1px solid ${COLORS.line}` }}
-          />
+      {/* Cards — no scroll, flex-1 distributes space */}
+      <div className="flex-1 flex flex-col gap-3 px-4 py-4">
+
+        {/* Fee settings */}
+        <div className="rounded-2xl px-4 py-3" style={{ background: COLORS.card }}>
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            {[
+              { label: 'Phí/người', val, setVal },
+              { label: 'Tiền nước', val: waterVal, setVal: setWaterVal },
+              { label: 'Tiền sân', val: courtVal, setVal: setCourtVal },
+            ].map(({ label, val: v, setVal: sv }) => (
+              <div key={label}>
+                <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600, marginBottom: 4 }}>{label}</div>
+                <input
+                  inputMode="numeric"
+                  value={v}
+                  onChange={e => sv(e.target.value.replace(/[^\d]/g, ''))}
+                  className="w-full px-2 py-2 rounded-lg text-sm outline-none text-center"
+                  style={{ border: `1px solid ${COLORS.line}` }}
+                />
+              </div>
+            ))}
+          </div>
           <button
             onClick={() => {
               setFee(Number(val) || DEFAULT_FEE);
@@ -1026,99 +1024,97 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
               setCourtFee(Number(courtVal) || 0);
               onClose();
             }}
-            className="w-full py-2.5 rounded-lg text-sm font-medium mb-4"
+            className="w-full py-2 rounded-xl text-sm font-semibold"
             style={{ background: COLORS.blue, color: 'white' }}
           >
             Lưu
           </button>
+        </div>
 
-          {/* Room URL */}
-          {roomUrl && (
-            <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 16, marginBottom: 4 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Link chia sẻ phòng</div>
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-2" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>
-                <span style={{ fontSize: 11, color: COLORS.muted, flex: 1, wordBreak: 'break-all', lineHeight: 1.5 }}>{roomUrl}</span>
-              </div>
-              <button
-                onClick={copyRoomUrl}
-                className="w-full py-2.5 rounded-lg text-sm font-medium"
-                style={{ background: copied ? COLORS.green : COLORS.blue, color: 'white' }}
-              >
-                {copied ? '✓ Đã sao chép!' : 'Sao chép link'}
-              </button>
+        {/* Room URL */}
+        {roomUrl && (
+          <div className="rounded-2xl px-4 py-3" style={{ background: COLORS.card }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Link chia sẻ phòng</div>
+            <div className="px-3 py-2 rounded-lg mb-2" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>
+              <span style={{ fontSize: 10, color: COLORS.muted, wordBreak: 'break-all', lineHeight: 1.5, display: 'block' }}>{roomUrl}</span>
+            </div>
+            <button
+              onClick={copyRoomUrl}
+              className="w-full py-2 rounded-xl text-sm font-semibold"
+              style={{ background: copied ? COLORS.green : COLORS.blue, color: 'white' }}
+            >
+              {copied ? '✓ Đã sao chép!' : 'Sao chép link'}
+            </button>
+          </div>
+        )}
+
+        {/* Backup */}
+        <div className="rounded-2xl px-4 py-3" style={{ background: COLORS.card }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Sao lưu · Xuất file JSON</div>
+          <div className="flex gap-2">
+            <button
+              onClick={exportBackup}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium"
+              style={{ background: COLORS.navy, color: 'white' }}
+            >
+              <Download size={14} /> Xuất
+            </button>
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-sm font-medium"
+              style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
+            >
+              <Upload size={14} /> Nhập
+            </button>
+            <input ref={fileRef} type="file" accept=".json" onChange={handleRestoreFile} style={{ display: 'none' }} />
+          </div>
+          {restoreMsg && (
+            <div style={{ marginTop: 6, fontSize: 12, color: restoreMsg.startsWith('✓') ? COLORS.green : COLORS.red }}>
+              {restoreMsg}
             </div>
           )}
+        </div>
 
-          {/* Backup section */}
-          <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Sao lưu dữ liệu</div>
-            <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 12 }}>Xuất file JSON</div>
-            <div className="flex gap-2">
-              <button
-                onClick={exportBackup}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                style={{ background: COLORS.navy, color: 'white' }}
-              >
-                <Download size={15} /> Xuất backup
-              </button>
-              <button
-                onClick={() => fileRef.current?.click()}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium"
-                style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
-              >
-                <Upload size={15} /> Nhập backup
-              </button>
-              <input ref={fileRef} type="file" accept=".json" onChange={handleRestoreFile} style={{ display: 'none' }} />
+        {/* Past date */}
+        <div className="rounded-2xl px-4 py-3" style={{ background: COLORS.card }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Nhập dữ liệu ngày cũ</div>
+          {activeDateKey !== todayKey && (
+            <div className="rounded-lg px-3 py-1.5 mb-2" style={{ background: '#FFF8E1', border: `1px solid ${COLORS.yellow}`, fontSize: 12, color: COLORS.brown }}>
+              Đang xem: <strong>{dateKeyToVN(activeDateKey)}</strong>
             </div>
-            {restoreMsg && (
-              <div style={{ marginTop: 8, fontSize: 12, color: restoreMsg.startsWith('✓') ? COLORS.green : COLORS.red }}>
-                {restoreMsg}
-              </div>
-            )}
-          </div>
-
-          {/* Past date entry */}
-          <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 16, marginTop: 4 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Nhập dữ liệu ngày cũ</div>
-            {activeDateKey !== todayKey && (
-              <div style={{ background: '#FFF8E1', border: `1px solid ${COLORS.yellow}`, borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: COLORS.brown }}>
-                Đang xem: <strong>{dateKeyToVN(activeDateKey)}</strong>
-              </div>
-            )}
+          )}
+          <div className="flex gap-2">
             <input
               type="date"
               value={dateVal}
               max={todayKey}
               onChange={e => setDateVal(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg text-sm mb-2 outline-none"
-              style={{ border: `1px solid ${COLORS.line}` }}
+              className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
+              style={{ border: `1px solid ${COLORS.line}`, minWidth: 0 }}
             />
             <button
-              onClick={() => {
-                if (!dateVal) return;
-                onSwitchDate(dateVal);
-                onClose();
-              }}
+              onClick={() => { if (!dateVal) return; onSwitchDate(dateVal); onClose(); }}
               disabled={!dateVal || dateVal === activeDateKey}
-              className="w-full py-2.5 rounded-lg text-sm font-medium mb-2"
+              className="px-4 py-2 rounded-xl text-sm font-semibold flex-shrink-0"
               style={{
                 background: (!dateVal || dateVal === activeDateKey) ? COLORS.line : COLORS.blue,
                 color: 'white',
               }}
             >
-              Chuyển sang ngày đã chọn
+              Chuyển
             </button>
-            {activeDateKey !== todayKey && (
-              <button
-                onClick={() => { onSwitchDate(todayKey); onClose(); }}
-                className="w-full py-2.5 rounded-lg text-sm font-medium"
-                style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
-              >
-                Quay về hôm nay
-              </button>
-            )}
           </div>
+          {activeDateKey !== todayKey && (
+            <button
+              onClick={() => { onSwitchDate(todayKey); onClose(); }}
+              className="w-full py-2 rounded-xl text-sm font-medium mt-2"
+              style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
+            >
+              Quay về hôm nay
+            </button>
+          )}
         </div>
+
       </div>
     </div>
   );
