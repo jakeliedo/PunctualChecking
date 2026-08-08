@@ -41,6 +41,7 @@ const DEFAULT_MEMBERS = [
   'Thiên Phúc (12)', 'Anh Quần Jean', 'Anh Hải ACB', 'Hào Nhỏ', 'Hải Bánh',
   'Phạm Dũng', 'Tân Em', 'Hiếu Cá', 'Anh Tâm thợ may', 'Hữu Vinh',
   'Anh Tuấn lớn', 'Gia Quí', 'Khoa Du Hí', 'Vũ Nhỏ',
+  'Đại Nha Sĩ', 'Anh Quang', 'Duy Phan', 'Menun', 'Luân XM',
 ].map(name => ({ id: newId('mem'), name, playCount: 0, joinedAt: Date.now() }));
 
 async function storageGet(key) {
