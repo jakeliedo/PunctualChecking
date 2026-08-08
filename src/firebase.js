@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import {
-  getFirestore, doc, getDoc, setDoc, deleteDoc,
+  getFirestore, doc, collection, getDoc, getDocs, setDoc, deleteDoc,
   arrayUnion, arrayRemove,
 } from 'firebase/firestore';
 
@@ -74,14 +74,30 @@ export async function storageDelete(key) {
   }
 }
 
-// List all saved day keys — Firestore meta index, fall back to localStorage scan
+// List all saved day keys.
+// Priority: Firestore meta/index → scan Firestore data collection → localStorage
 export async function listDayKeys() {
+  // 1. Try meta/index (fastest — maintained by storageSet/storageDelete)
   try {
     const snap = await getDoc(metaDoc());
     const cloudKeys = snap.data()?.dayKeys || [];
     if (cloudKeys.length > 0) return cloudKeys.sort().reverse();
   } catch {}
-  // Fallback: scan localStorage and migrate to Firestore meta in background
+
+  // 2. Meta/index empty or missing — scan actual Firestore documents to rebuild it.
+  //    This recovers from cases where data existed before meta/index was added,
+  //    or when the index was lost/corrupted.
+  try {
+    const colSnap = await getDocs(collection(db, 'rooms', roomId, 'data'));
+    const scannedKeys = colSnap.docs.map(d => d.id).filter(k => k.startsWith('day:'));
+    if (scannedKeys.length > 0) {
+      // Rebuild meta/index in background so next load is fast
+      setDoc(metaDoc(), { dayKeys: scannedKeys }, { merge: true }).catch(() => {});
+      return scannedKeys.sort().reverse();
+    }
+  } catch {}
+
+  // 3. Final fallback: scan localStorage (offline / Firestore unreachable)
   const localKeys = Object.keys(localStorage).filter(k => k.startsWith('day:'));
   if (localKeys.length > 0) {
     setDoc(metaDoc(), { dayKeys: localKeys }, { merge: true }).catch(() => {});

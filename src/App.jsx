@@ -1392,16 +1392,14 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
   const [courtInput, setCourtInput] = useState(String(defaultCourtFee));
   const settlementCanvasRef = useRef(null);
 
-  // Load all day data from localStorage
+  // Load all day data from Firestore (falls back to localStorage if offline)
   useEffect(() => {
-    const data = {};
-    historyKeys.forEach(k => {
-      try {
-        const raw = localStorage.getItem(k);
-        if (raw) data[k] = JSON.parse(raw);
-      } catch {}
+    if (historyKeys.length === 0) return;
+    Promise.all(historyKeys.map(k => storageGet(k).then(v => [k, v]))).then(entries => {
+      const data = {};
+      entries.forEach(([k, v]) => { if (v) data[k] = v; });
+      setDayData(data);
     });
-    setDayData(data);
   }, [historyKeys]);
 
   const toggle = (key) => {
