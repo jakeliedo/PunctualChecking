@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { storageGet, storageSet, storageDelete, listDayKeys, roomId } from './firebase';
+import { storageGet, storageSet, storageDelete, listDayKeys } from './firebase';
 import {
   Search, Plus, X, Download, Upload, UserPlus, Users, ClipboardList,
   Receipt, Loader2, Banknote, Landmark, ChevronLeft, Settings,
@@ -519,7 +519,6 @@ export default function App() {
           onSwitchDate={(key) => setActiveDateKey(key)}
           onClose={() => setShowSettings(false)}
           onRestore={() => window.location.reload()}
-          roomUrl={`${window.location.origin}${window.location.pathname}?room=${roomId}`}
         />
       )}
       {reportView && (
@@ -957,7 +956,7 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
   );
 }
 
-function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtFee, activeDateKey, todayKey, onSwitchDate, onClose, onRestore, roomUrl }) {
+function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtFee, activeDateKey, todayKey, onSwitchDate, onClose, onRestore }) {
   const [val, setVal] = useState(String(fee));
   const [waterVal, setWaterVal] = useState(String(waterFee));
   const [courtVal, setCourtVal] = useState(String(courtFee));
@@ -1006,7 +1005,7 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
   };
 
   const copyRoomUrl = () => {
-    navigator.clipboard.writeText(roomUrl).then(() => {
+    navigator.clipboard.writeText('https://jakeliedo.github.io/PunctualChecking/').then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -1066,21 +1065,19 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
         </div>
 
         {/* Room URL */}
-        {roomUrl && (
-          <div className="rounded-2xl px-4 py-3" style={{ background: COLORS.card }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Link chia sẻ phòng</div>
-            <div className="px-3 py-2 rounded-lg mb-2" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>
-              <span style={{ fontSize: 10, color: COLORS.muted, wordBreak: 'break-all', lineHeight: 1.5, display: 'block' }}>{roomUrl}</span>
-            </div>
-            <button
-              onClick={copyRoomUrl}
-              className="w-full py-2 rounded-xl text-sm font-semibold"
-              style={{ background: copied ? COLORS.green : COLORS.blue, color: 'white' }}
-            >
-              {copied ? '✓ Đã sao chép!' : 'Sao chép link'}
-            </button>
+        <div className="rounded-2xl px-4 py-3" style={{ background: COLORS.card }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Link chia sẻ</div>
+          <div className="px-3 py-2 rounded-lg mb-2" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>
+            <span style={{ fontSize: 10, color: COLORS.muted, wordBreak: 'break-all', lineHeight: 1.5, display: 'block' }}>https://jakeliedo.github.io/PunctualChecking/</span>
           </div>
-        )}
+          <button
+            onClick={copyRoomUrl}
+            className="w-full py-2 rounded-xl text-sm font-semibold"
+            style={{ background: copied ? COLORS.green : COLORS.blue, color: 'white' }}
+          >
+            {copied ? '✓ Đã sao chép!' : 'Sao chép link'}
+          </button>
+        </div>
 
         {/* Backup */}
         <div className="rounded-2xl px-4 py-3" style={{ background: COLORS.card }}>

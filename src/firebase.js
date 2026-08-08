@@ -17,60 +17,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // ---------- Room ID ----------
-// iOS separates localStorage between Safari and PWA (standalone) contexts.
-// Cookies ARE shared between them, so we use cookies as a bridge.
-
-function _getRoomCookie() {
-  try {
-    const m = document.cookie.match(/(?:^|; )roomId=([a-f0-9]+)/);
-    return m ? m[1] : null;
-  } catch { return null; }
-}
-
-function _setRoomCookie(id) {
-  try {
-    const exp = new Date();
-    exp.setFullYear(exp.getFullYear() + 10);
-    // path=/ ensures the cookie is accessible from both Safari and the PWA's start_url
-    document.cookie = `roomId=${id}; expires=${exp.toUTCString()}; path=/; SameSite=Lax`;
-  } catch {}
-}
-
-// Priority: URL ?room= param → localStorage → cookie (Safari↔PWA bridge) → generate new
-export function getRoomId() {
-  const params = new URLSearchParams(window.location.search);
-  const fromUrl = params.get('room');
-  if (fromUrl) {
-    localStorage.setItem('roomId', fromUrl);
-    _setRoomCookie(fromUrl);
-    // Clean ?room= from URL bar (already saved, no need to expose it)
-    params.delete('room');
-    const clean = params.toString()
-      ? `${window.location.pathname}?${params}`
-      : window.location.pathname + (import.meta.env.BASE_URL !== '/' ? '' : '');
-    window.history.replaceState({}, '', clean || window.location.pathname);
-    return fromUrl;
-  }
-  const stored = localStorage.getItem('roomId');
-  if (stored) {
-    _setRoomCookie(stored); // keep cookie in sync with localStorage
-    return stored;
-  }
-  // Cookie fallback: bridges the gap when PWA and Safari have isolated localStorage
-  const fromCookie = _getRoomCookie();
-  if (fromCookie) {
-    localStorage.setItem('roomId', fromCookie);
-    return fromCookie;
-  }
-  // First ever launch — generate a random 16-char hex ID
-  const bytes = crypto.getRandomValues(new Uint8Array(8));
-  const newId = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-  localStorage.setItem('roomId', newId);
-  _setRoomCookie(newId);
-  return newId;
-}
-
-export const roomId = getRoomId();
+export const roomId = 'be015f059bde59eb';
 
 // ---------- Firestore helpers ----------
 function dataDoc(key) {
