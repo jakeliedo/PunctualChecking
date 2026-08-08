@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { storageGet, storageSet, storageDelete, listDayKeys, roomId } from './firebase';
 import {
   Search, Plus, X, Download, Upload, UserPlus, Users, ClipboardList,
   Receipt, Loader2, Banknote, Landmark, ChevronLeft, Settings2,
@@ -45,22 +46,6 @@ const DEFAULT_MEMBERS = [
   'Đại Nha Sĩ', 'Anh Quang', 'Duy Phan', 'Menun', 'Luân XM',
 ].map(name => ({ id: newId('mem'), name, playCount: 0, joinedAt: Date.now() }));
 
-async function storageGet(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function storageSet(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (e) {
-    console.error('Storage set failed', key, e);
-  }
-}
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -100,10 +85,7 @@ export default function App() {
       setWaterFee(f?.waterFee ?? 15000);
       setCourtFee(f?.courtFee ?? 375000);
       setCheckins(day?.checkins || []);
-      const keys = Object.keys(localStorage)
-        .filter(k => k.startsWith('day:'))
-        .sort()
-        .reverse();
+      const keys = await listDayKeys();
       setHistoryKeys(keys);
       setLoading(false);
     })();
@@ -125,9 +107,12 @@ export default function App() {
   useEffect(() => {
     if (!loading) {
       storageSet(`day:${activeDateKey}`, { checkins, waterFeeUsed: waterFee, courtFeeUsed: courtFee, savedAt: Date.now() });
-      setHistoryKeys(
-        Object.keys(localStorage).filter(k => k.startsWith('day:')).sort().reverse()
-      );
+      // Optimistically add today's key to history list (storageSet handles Firestore meta)
+      setHistoryKeys(prev => {
+        const key = `day:${activeDateKey}`;
+        if (prev.includes(key)) return prev;
+        return [key, ...prev].sort().reverse();
+      });
     }
   }, [checkins, loading, activeDateKey, waterFee]);
 
@@ -455,8 +440,8 @@ export default function App() {
             onOpen={loadHistoryReport}
             todayKey={todayKey}
             onDelete={(key) => {
-              localStorage.removeItem(key);
-              setHistoryKeys(Object.keys(localStorage).filter(k => k.startsWith('day:')).sort().reverse());
+              storageDelete(key);
+              setHistoryKeys(prev => prev.filter(k => k !== key));
             }}
           />
         )}
@@ -517,6 +502,7 @@ export default function App() {
           onSwitchDate={(key) => setActiveDateKey(key)}
           onClose={() => setShowSettings(false)}
           onRestore={() => window.location.reload()}
+          roomUrl={`${window.location.origin}${window.location.pathname}?room=${roomId}`}
         />
       )}
       {reportView && (
@@ -937,17 +923,20 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
   );
 }
 
-function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtFee, activeDateKey, todayKey, onSwitchDate, onClose, onRestore }) {
+function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtFee, activeDateKey, todayKey, onSwitchDate, onClose, onRestore, roomUrl }) {
   const [val, setVal] = useState(String(fee));
   const [waterVal, setWaterVal] = useState(String(waterFee));
   const [courtVal, setCourtVal] = useState(String(courtFee));
   const [restoreMsg, setRestoreMsg] = useState('');
   const [dateVal, setDateVal] = useState('');
+  const [copied, setCopied] = useState(false);
   const fileRef = useRef(null);
 
   const exportBackup = () => {
+    // localStorage is kept in sync by dual-write, so this still works
     const data = {};
     Object.keys(localStorage).forEach(k => {
+      if (k === 'roomId') return; // don't export the room ID
       try { data[k] = JSON.parse(localStorage.getItem(k)); } catch {}
     });
     const blob = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), data }, null, 2)], { type: 'application/json' });
@@ -964,15 +953,14 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const parsed = JSON.parse(ev.target.result);
         const data = parsed.data || parsed;
-        let count = 0;
-        Object.entries(data).forEach(([k, v]) => {
-          localStorage.setItem(k, JSON.stringify(v));
-          count++;
-        });
+        const count = Object.keys(data).length;
+        // Write to both localStorage and Firestore
+        const { restoreBackup } = await import('./firebase');
+        await restoreBackup(data);
         setRestoreMsg(`✓ Đã khôi phục ${count} mục. Đang tải lại...`);
         setTimeout(() => { onRestore(); onClose(); }, 1200);
       } catch {
@@ -981,6 +969,13 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  const copyRoomUrl = () => {
+    navigator.clipboard.writeText(roomUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   return (
@@ -1024,6 +1019,26 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
         >
           Lưu
         </button>
+
+        {/* Room URL */}
+        {roomUrl && (
+          <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 16, marginBottom: 4 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Link chia sẻ phòng</div>
+            <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 8 }}>
+              Gửi link này cho người khác để họ xem dữ liệu. Ai có link mới truy cập được.
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg mb-2" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>
+              <span style={{ fontSize: 11, color: COLORS.muted, flex: 1, wordBreak: 'break-all', lineHeight: 1.5 }}>{roomUrl}</span>
+            </div>
+            <button
+              onClick={copyRoomUrl}
+              className="w-full py-2.5 rounded-lg text-sm font-medium"
+              style={{ background: copied ? COLORS.green : COLORS.blue, color: 'white' }}
+            >
+              {copied ? '✓ Đã sao chép!' : 'Sao chép link'}
+            </button>
+          </div>
+        )}
 
         {/* Backup section */}
         <div style={{ borderTop: `1px solid ${COLORS.line}`, paddingTop: 16 }}>
