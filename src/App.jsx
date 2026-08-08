@@ -257,16 +257,37 @@ export default function App() {
       const target = prev.find(c => c.id === targetId);
       if (!target) return prev;
       const oldPayerName = target.paidBy;
+
+      // Step 1: strip old payer's list + clear target's paidBy
       let updated = prev.map(c => {
         if (oldPayerName && c.name === oldPayerName)
           return { ...c, paidForNames: (c.paidForNames || []).filter(n => n !== target.name) };
+        if (c.id === targetId) return { ...c, paidBy: null, paid: false, amount: 0 };
         return c;
       });
-      updated = updated.map(c => c.id === targetId ? { ...c, paidBy: null, paid: false, amount: 0 } : c);
+
+      // Step 2: recalc old payer's amount (if already paid)
+      if (oldPayerName) {
+        updated = updated.map(c => {
+          if (c.name === oldPayerName && c.paid)
+            return { ...c, amount: fee * (1 + (c.paidForNames || []).length) };
+          return c;
+        });
+      }
+
       if (!payerName) return updated;
-      return updated.map(c => {
+
+      // Step 3: assign new payer
+      updated = updated.map(c => {
         if (c.id === targetId) return { ...c, paidBy: payerName };
         if (c.name === payerName) return { ...c, paidForNames: [...(c.paidForNames || []), target.name] };
+        return c;
+      });
+
+      // Step 4: recalc new payer's amount (if already paid)
+      return updated.map(c => {
+        if (c.name === payerName && c.paid)
+          return { ...c, amount: fee * (1 + (c.paidForNames || []).length) };
         return c;
       });
     });
@@ -589,46 +610,51 @@ function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAdd
                   </span>
                   {c.isGuest && <span style={{ fontSize: 10, color: COLORS.brown, background: '#F3E9DD', padding: '2px 6px', borderRadius: 6 }}>Vãng lai</span>}
                 </div>
-                <div className="flex items-center gap-0.5">
-                  <button onClick={() => onPayFor(c.id)} className="p-1.5 rounded-lg" style={{
-                    color: payForActive ? COLORS.blue : COLORS.muted,
-                    background: payForActive ? '#EEF4FB' : 'transparent',
-                  }}>
-                    <ArrowLeftRight size={14} />
-                  </button>
-                  <button onClick={() => onRemove(c.id)} className="p-1.5"><X size={15} style={{ color: COLORS.muted }} /></button>
-                </div>
+                <button onClick={() => onRemove(c.id)} className="p-1.5"><X size={15} style={{ color: COLORS.muted }} /></button>
               </div>
 
               {/* Notes */}
               {isCovered && (
-                <div style={{ fontSize: 11, color: COLORS.muted, fontStyle: 'italic', marginBottom: 5, paddingLeft: 26 }}>
+                <div style={{ fontSize: 11, color: COLORS.muted, fontStyle: 'italic', marginBottom: 5, paddingLeft: 22 }}>
                   − {c.paidBy}
                 </div>
               )}
               {isActivePayer && (
-                <div style={{ fontSize: 11, color: COLORS.blue, marginBottom: 5, paddingLeft: 26 }}>
+                <div style={{ fontSize: 11, color: COLORS.blue, marginBottom: 5, paddingLeft: 22 }}>
                   + {paidForNames.join(' + ')}
                 </div>
               )}
 
               {/* Payment row */}
               {isCovered ? (
-                <div className="flex items-center" style={{ paddingLeft: 26 }}>
+                <div className="flex items-center gap-2">
                   <span style={{ fontSize: 12, color: COLORS.muted }}>Được trả thay</span>
+                  <button onClick={() => onPayFor(c.id)} className="flex items-center justify-center rounded-xl" style={{
+                    width: 40, height: 36, color: COLORS.blue, background: '#EEF4FB', border: `1px solid #C8DFF2`, flexShrink: 0,
+                  }}>
+                    <ArrowLeftRight size={15} />
+                  </button>
                   <span className="ml-auto text-sm font-semibold" style={{ color: COLORS.muted }}>0đ</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <MethodChip active={c.paid && c.method === 'cash'} color={COLORS.brown} icon={<Banknote size={14} />} label="Tiền mặt" onClick={() => onPaid(c.id, 'cash')} />
-                  <MethodChip active={c.paid && c.method === 'transfer'} color={COLORS.blue} icon={<Landmark size={14} />} label="Chuyển khoản" onClick={() => onPaid(c.id, 'transfer')} />
+                <div className="flex items-center gap-1.5">
+                  <MethodChip active={c.paid && c.method === 'cash'} color={COLORS.brown} icon={<Banknote size={13} />} label="TM" onClick={() => onPaid(c.id, 'cash')} />
+                  <MethodChip active={c.paid && c.method === 'transfer'} color={COLORS.blue} icon={<Landmark size={13} />} label="CK" onClick={() => onPaid(c.id, 'transfer')} />
+                  <button onClick={() => onPayFor(c.id)} className="flex items-center justify-center rounded-xl" style={{
+                    width: 40, height: 36, flexShrink: 0,
+                    color: payForActive ? COLORS.blue : COLORS.muted,
+                    background: payForActive ? '#EEF4FB' : COLORS.ivory,
+                    border: `1px solid ${payForActive ? '#C8DFF2' : COLORS.line}`,
+                  }}>
+                    <ArrowLeftRight size={15} />
+                  </button>
                   {c.paid ? (
                     <input
                       value={c.amount}
                       onChange={e => onAmount(c.id, e.target.value)}
                       inputMode="numeric"
                       className="ml-auto text-right rounded-lg px-2 py-1 text-sm font-semibold"
-                      style={{ width: 90, border: `1px solid ${COLORS.line}`, color: COLORS.green }}
+                      style={{ width: 84, border: `1px solid ${COLORS.line}`, color: COLORS.green }}
                     />
                   ) : (
                     <span className="ml-auto text-sm font-semibold" style={{ color: COLORS.red }}>Chưa đóng</span>
@@ -735,8 +761,9 @@ function MethodChip({ active, color, icon, label, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium"
+      className="flex items-center gap-1 px-2 rounded-xl text-xs font-medium"
       style={{
+        height: 36, minWidth: 52, justifyContent: 'center', flexShrink: 0,
         background: active ? color : COLORS.ivory,
         color: active ? 'white' : COLORS.muted,
         border: `1px solid ${active ? color : COLORS.line}`,
