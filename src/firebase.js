@@ -17,7 +17,25 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // ---------- Room ID ----------
-export const roomId = 'be015f059bde59eb';
+// Read ?room= URL param first (share link recovery), fall back to hardcoded default.
+// No localStorage → no iOS Safari/PWA isolation issue.
+const DEFAULT_ROOM_ID = 'be015f059bde59eb';
+
+function getEffectiveRoomId() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('room');
+    if (fromUrl && /^[a-f0-9]{16}$/.test(fromUrl)) {
+      params.delete('room');
+      const clean = window.location.pathname + (params.toString() ? `?${params}` : '');
+      window.history.replaceState({}, '', clean);
+      return fromUrl;
+    }
+  } catch {}
+  return DEFAULT_ROOM_ID;
+}
+
+export const roomId = getEffectiveRoomId();
 
 // ---------- Firestore helpers ----------
 function dataDoc(key) {

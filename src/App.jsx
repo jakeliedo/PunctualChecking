@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { storageGet, storageSet, storageDelete, listDayKeys } from './firebase';
+import { storageGet, storageSet, storageDelete, listDayKeys, roomId } from './firebase';
 import {
   Search, Plus, X, Download, Upload, UserPlus, Users, ClipboardList,
   Receipt, Loader2, Banknote, Landmark, ChevronLeft, Settings,
@@ -1022,8 +1022,9 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
     e.target.value = '';
   };
 
+  const shareUrl = `https://jakeliedo.github.io/PunctualChecking/?room=${roomId}`;
   const copyRoomUrl = () => {
-    navigator.clipboard.writeText('https://jakeliedo.github.io/PunctualChecking/').then(() => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -1086,7 +1087,7 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
         <div className="rounded-2xl px-4 py-3" style={{ background: COLORS.card }}>
           <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Link chia sẻ</div>
           <div className="px-3 py-2 rounded-lg mb-2" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>
-            <span style={{ fontSize: 10, color: COLORS.muted, wordBreak: 'break-all', lineHeight: 1.5, display: 'block' }}>https://jakeliedo.github.io/PunctualChecking/</span>
+            <span style={{ fontSize: 10, color: COLORS.muted, wordBreak: 'break-all', lineHeight: 1.5, display: 'block' }}>{shareUrl}</span>
           </div>
           <button
             onClick={copyRoomUrl}
