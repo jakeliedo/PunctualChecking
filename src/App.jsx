@@ -247,8 +247,11 @@ export default function App() {
     setCheckins(prev => prev.map(c => {
       if (c.id !== id) return c;
       if (c.paid && c.method === method) return { ...c, paid: false, method: null, amount: 0 };
-      const effectiveFee = fee * (1 + (c.paidForNames || []).length);
-      return { ...c, paid: true, method, amount: c.amount > 0 && c.amount !== fee ? c.amount : effectiveFee };
+      const numCovered = (c.paidForNames || []).length;
+      const effectiveFee = fee * (1 + numCovered);
+      // Keep custom amount only if person covers nobody and already has a non-default amount
+      const amount = (numCovered === 0 && c.amount > 0 && c.amount !== fee) ? c.amount : effectiveFee;
+      return { ...c, paid: true, method, amount };
     }));
   };
 
@@ -638,8 +641,8 @@ function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAdd
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5">
-                  <MethodChip active={c.paid && c.method === 'cash'} color={COLORS.brown} icon={<Banknote size={13} />} label="TM" onClick={() => onPaid(c.id, 'cash')} />
-                  <MethodChip active={c.paid && c.method === 'transfer'} color={COLORS.blue} icon={<Landmark size={13} />} label="CK" onClick={() => onPaid(c.id, 'transfer')} />
+                  <MethodChip active={c.paid && c.method === 'cash'} color={COLORS.brown} icon={<Banknote size={13} />} label="Cash" onClick={() => onPaid(c.id, 'cash')} />
+                  <MethodChip active={c.paid && c.method === 'transfer'} color={COLORS.blue} icon={<Landmark size={13} />} label="Transfer" onClick={() => onPaid(c.id, 'transfer')} />
                   <button onClick={() => onPayFor(c.id)} className="flex items-center justify-center rounded-xl" style={{
                     width: 40, height: 36, flexShrink: 0,
                     color: payForActive ? COLORS.blue : COLORS.muted,
