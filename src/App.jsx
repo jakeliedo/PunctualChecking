@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Search, Plus, X, Download, Upload, UserPlus, Users, ClipboardList,
   Receipt, Loader2, Banknote, Landmark, ChevronLeft, Settings2,
-  ListPlus, Pencil, Trash2, Lock, LockOpen, Calculator, CheckSquare, Square
+  ListPlus, Pencil, Trash2, Lock, LockOpen, Calculator, CheckSquare, Square,
+  ArrowLeftRight
 } from 'lucide-react';
 
 const COLORS = {
@@ -84,6 +85,7 @@ export default function App() {
   const [reportView, setReportView] = useState(null);
   const [reportImgUrl, setReportImgUrl] = useState(null);
   const [historyKeys, setHistoryKeys] = useState([]);
+  const [showPayFor, setShowPayFor] = useState(null);
   const canvasRef = useRef(null);
 
   // ---------- Load ----------
@@ -141,9 +143,9 @@ export default function App() {
 
   const totalPeople = checkins.length;
   const paidList = checkins.filter(c => c.paid);
-  const unpaidList = checkins.filter(c => !c.paid);
+  const unpaidList = checkins.filter(c => !c.paid && !c.paidBy);
   const totalCollected = paidList.reduce((s, c) => s + (Number(c.amount) || 0), 0);
-  const totalOwed = unpaidList.length * fee;
+  const totalOwed = unpaidList.reduce((s, c) => s + fee * (1 + (c.paidForNames || []).length), 0);
 
   // ---------- Handlers ----------
   const addMemberToRoster = () => {
@@ -214,7 +216,7 @@ export default function App() {
     if (existing) {
       setCheckins(prev => prev.filter(c => c !== existing));
     } else {
-      setCheckins(prev => [...prev, { id: member.id, name: member.name, isGuest: false, paid: false, method: null, amount: 0 }]);
+      setCheckins(prev => [...prev, { id: member.id, name: member.name, isGuest: false, paid: false, method: null, amount: 0, paidBy: null, paidForNames: [] }]);
       setMembers(prev => prev.map(m => m.id === member.id ? { ...m, playCount: (m.playCount || 0) + 1 } : m));
     }
   };
@@ -223,19 +225,51 @@ export default function App() {
     const guestCount = checkins.filter(c => c.isGuest).length;
     const baseName = newName.trim() || `Khách lẻ #${guestCount + 1}`;
     const name = `${baseName} **`;
-    setCheckins(prev => [...prev, { id: newId('guest'), name, isGuest: true, paid: false, method: null, amount: 0 }]);
+    setCheckins(prev => [...prev, { id: newId('guest'), name, isGuest: true, paid: false, method: null, amount: 0, paidBy: null, paidForNames: [] }]);
     setNewName('');
     setShowAddGuest(false);
   };
 
-  const removeFromToday = (id) => setCheckins(prev => prev.filter(c => c.id !== id));
+  const removeFromToday = (id) => {
+    setCheckins(prev => {
+      const target = prev.find(c => c.id === id);
+      if (!target) return prev.filter(c => c.id !== id);
+      return prev.filter(c => c.id !== id).map(c => {
+        if (c.paidBy === target.name) return { ...c, paidBy: null };
+        if ((c.paidForNames || []).includes(target.name))
+          return { ...c, paidForNames: c.paidForNames.filter(n => n !== target.name) };
+        return c;
+      });
+    });
+  };
 
   const setPaid = (id, method) => {
     setCheckins(prev => prev.map(c => {
       if (c.id !== id) return c;
       if (c.paid && c.method === method) return { ...c, paid: false, method: null, amount: 0 };
-      return { ...c, paid: true, method, amount: c.amount && c.amount !== fee ? c.amount : fee };
+      const effectiveFee = fee * (1 + (c.paidForNames || []).length);
+      return { ...c, paid: true, method, amount: c.amount > 0 && c.amount !== fee ? c.amount : effectiveFee };
     }));
+  };
+
+  const setPayFor = (targetId, payerName) => {
+    setCheckins(prev => {
+      const target = prev.find(c => c.id === targetId);
+      if (!target) return prev;
+      const oldPayerName = target.paidBy;
+      let updated = prev.map(c => {
+        if (oldPayerName && c.name === oldPayerName)
+          return { ...c, paidForNames: (c.paidForNames || []).filter(n => n !== target.name) };
+        return c;
+      });
+      updated = updated.map(c => c.id === targetId ? { ...c, paidBy: null, paid: false, amount: 0 } : c);
+      if (!payerName) return updated;
+      return updated.map(c => {
+        if (c.id === targetId) return { ...c, paidBy: payerName };
+        if (c.name === payerName) return { ...c, paidForNames: [...(c.paidForNames || []), target.name] };
+        return c;
+      });
+    });
   };
 
   const setAmount = (id, value) => {
@@ -366,6 +400,7 @@ export default function App() {
             onAmount={setAmount}
             onAddGuest={() => setShowAddGuest(true)}
             onAddFromRoster={() => setTab('roster')}
+            onPayFor={(id) => setShowPayFor(id)}
           />
         )}
         {tab === 'roster' && (
@@ -476,6 +511,15 @@ export default function App() {
           onDelete={deleteMember}
         />
       )}
+      {showPayFor && (
+        <PayForModal
+          target={checkins.find(c => c.id === showPayFor)}
+          allCheckins={checkins}
+          fee={fee}
+          onSetPayFor={setPayFor}
+          onClose={() => setShowPayFor(null)}
+        />
+      )}
     </div>
   );
 }
@@ -500,7 +544,7 @@ function TabButton({ icon, label, active, onClick }) {
   );
 }
 
-function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster }) {
+function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor }) {
   const sorted = sortMembersFirst(checkins);
   if (checkins.length === 0) {
     return (
@@ -525,33 +569,163 @@ function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAdd
         </button>
       </div>
       <div className="flex flex-col gap-2">
-        {sorted.map((c, idx) => (
-          <div key={c.id} className="rounded-xl p-3" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <span style={{ color: COLORS.muted, fontSize: 12, minWidth: 20 }}>{idx + 1}.</span>
-                <span className="truncate" style={{ fontWeight: 600, fontSize: 15 }}>{c.name}</span>
-                {c.isGuest && <span style={{ fontSize: 10, color: COLORS.brown, background: '#F3E9DD', padding: '2px 6px', borderRadius: 6 }}>Vãng lai</span>}
+        {sorted.map((c, idx) => {
+          const isCovered = !!c.paidBy;
+          const paidForNames = c.paidForNames || [];
+          const isActivePayer = paidForNames.length > 0;
+          const payForActive = isCovered || isActivePayer;
+          return (
+            <div key={c.id} className="rounded-xl p-3" style={{
+              background: COLORS.card,
+              border: `1px solid ${isCovered ? COLORS.line : COLORS.line}`,
+              opacity: isCovered ? 0.65 : 1,
+            }}>
+              {/* Name row */}
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span style={{ color: COLORS.muted, fontSize: 12, minWidth: 20 }}>{idx + 1}.</span>
+                  <span className="truncate" style={{ fontWeight: 600, fontSize: 15, color: isCovered ? COLORS.muted : COLORS.text }}>
+                    {c.name}
+                  </span>
+                  {c.isGuest && <span style={{ fontSize: 10, color: COLORS.brown, background: '#F3E9DD', padding: '2px 6px', borderRadius: 6 }}>Vãng lai</span>}
+                </div>
+                <div className="flex items-center gap-0.5">
+                  <button onClick={() => onPayFor(c.id)} className="p-1.5 rounded-lg" style={{
+                    color: payForActive ? COLORS.blue : COLORS.muted,
+                    background: payForActive ? '#EEF4FB' : 'transparent',
+                  }}>
+                    <ArrowLeftRight size={14} />
+                  </button>
+                  <button onClick={() => onRemove(c.id)} className="p-1.5"><X size={15} style={{ color: COLORS.muted }} /></button>
+                </div>
               </div>
-              <button onClick={() => onRemove(c.id)} className="p-1"><X size={16} style={{ color: COLORS.muted }} /></button>
-            </div>
-            <div className="flex items-center gap-2">
-              <MethodChip active={c.paid && c.method === 'cash'} color={COLORS.brown} icon={<Banknote size={14} />} label="Tiền mặt" onClick={() => onPaid(c.id, 'cash')} />
-              <MethodChip active={c.paid && c.method === 'transfer'} color={COLORS.blue} icon={<Landmark size={14} />} label="Chuyển khoản" onClick={() => onPaid(c.id, 'transfer')} />
-              {c.paid ? (
-                <input
-                  value={c.amount}
-                  onChange={e => onAmount(c.id, e.target.value)}
-                  inputMode="numeric"
-                  className="ml-auto text-right rounded-lg px-2 py-1 text-sm font-semibold"
-                  style={{ width: 90, border: `1px solid ${COLORS.line}`, color: COLORS.green }}
-                />
+
+              {/* Notes */}
+              {isCovered && (
+                <div style={{ fontSize: 11, color: COLORS.muted, fontStyle: 'italic', marginBottom: 5, paddingLeft: 26 }}>
+                  − {c.paidBy}
+                </div>
+              )}
+              {isActivePayer && (
+                <div style={{ fontSize: 11, color: COLORS.blue, marginBottom: 5, paddingLeft: 26 }}>
+                  + {paidForNames.join(' + ')}
+                </div>
+              )}
+
+              {/* Payment row */}
+              {isCovered ? (
+                <div className="flex items-center" style={{ paddingLeft: 26 }}>
+                  <span style={{ fontSize: 12, color: COLORS.muted }}>Được trả thay</span>
+                  <span className="ml-auto text-sm font-semibold" style={{ color: COLORS.muted }}>0đ</span>
+                </div>
               ) : (
-                <span className="ml-auto text-sm font-semibold" style={{ color: COLORS.red }}>Chưa đóng</span>
+                <div className="flex items-center gap-2">
+                  <MethodChip active={c.paid && c.method === 'cash'} color={COLORS.brown} icon={<Banknote size={14} />} label="Tiền mặt" onClick={() => onPaid(c.id, 'cash')} />
+                  <MethodChip active={c.paid && c.method === 'transfer'} color={COLORS.blue} icon={<Landmark size={14} />} label="Chuyển khoản" onClick={() => onPaid(c.id, 'transfer')} />
+                  {c.paid ? (
+                    <input
+                      value={c.amount}
+                      onChange={e => onAmount(c.id, e.target.value)}
+                      inputMode="numeric"
+                      className="ml-auto text-right rounded-lg px-2 py-1 text-sm font-semibold"
+                      style={{ width: 90, border: `1px solid ${COLORS.line}`, color: COLORS.green }}
+                    />
+                  ) : (
+                    <span className="ml-auto text-sm font-semibold" style={{ color: COLORS.red }}>Chưa đóng</span>
+                  )}
+                </div>
               )}
             </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PayForModal({ target, allCheckins, fee, onSetPayFor, onClose }) {
+  if (!target) return null;
+  const isCovered = !!target.paidBy;
+  const paidForNames = target.paidForNames || [];
+
+  // Eligible payers: not already covered, not the target itself
+  const eligible = allCheckins.filter(c => c.id !== target.id && !c.paidBy);
+
+  const handleSelect = (payerName) => { onSetPayFor(target.id, payerName); onClose(); };
+  const handleRemoveCoverage = () => { onSetPayFor(target.id, null); onClose(); };
+  const handleRemovePaidFor = (name) => {
+    const person = allCheckins.find(c => c.name === name);
+    if (person) onSetPayFor(person.id, null);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={onClose}>
+      <div className="w-full rounded-t-2xl px-4 pt-4" style={{
+        background: COLORS.card,
+        maxHeight: '72vh',
+        overflowY: 'auto',
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+      }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{target.name}</div>
+          <button onClick={onClose} className="p-1"><X size={18} style={{ color: COLORS.muted }} /></button>
+        </div>
+
+        {/* If this person is covered → show who covers them */}
+        {isCovered && (
+          <div className="mb-4 p-3 rounded-xl" style={{ background: '#EEF4FB' }}>
+            <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 8 }}>
+              Đang được <span style={{ fontWeight: 700, color: COLORS.blue }}>{target.paidBy}</span> trả tiền thay
+            </div>
+            <button onClick={handleRemoveCoverage} className="w-full py-2.5 rounded-xl text-sm font-medium"
+              style={{ background: '#FBEAEA', color: COLORS.red }}>
+              Xoá — để tự đóng
+            </button>
           </div>
-        ))}
+        )}
+
+        {/* If this person is paying for others → show the list */}
+        {paidForNames.length > 0 && (
+          <div className="mb-4">
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Đang trả tiền thay cho:</div>
+            {paidForNames.map(name => (
+              <div key={name} className="flex items-center justify-between py-2.5 px-3 mb-1 rounded-xl"
+                style={{ background: COLORS.ivory }}>
+                <span style={{ fontSize: 14 }}>+ {name}</span>
+                <button onClick={() => handleRemovePaidFor(name)}
+                  className="text-xs px-2 py-1 rounded-lg" style={{ color: COLORS.red, background: '#FBEAEA' }}>
+                  Xoá
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Select a payer (or switch payer) */}
+        <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 8 }}>
+          {isCovered ? 'Đổi sang người khác:' : `Chọn người sẽ trả thay cho ${target.name}:`}
+        </div>
+        {eligible
+          .filter(c => c.name !== target.paidBy && !paidForNames.includes(c.name))
+          .map(c => (
+            <button key={c.id} onClick={() => handleSelect(c.name)}
+              className="w-full text-left py-3 px-3 rounded-xl mb-1.5 text-sm font-medium"
+              style={{ background: COLORS.ivory, color: COLORS.text }}>
+              {c.name}
+              {(c.paidForNames || []).length > 0 && (
+                <span style={{ color: COLORS.blue, fontSize: 11, marginLeft: 6 }}>
+                  (đang trả cho {c.paidForNames.length} người)
+                </span>
+              )}
+            </button>
+          ))
+        }
+        {eligible.filter(c => c.name !== target.paidBy && !paidForNames.includes(c.name)).length === 0 && (
+          <div style={{ color: COLORS.muted, fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
+            Không còn ai khác có thể trả thay
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1342,6 +1516,7 @@ function drawReport(canvas, reportView) {
   const scale = 2;
   const width = 480;
   const rowH = 34;
+  const noteH = 16;
   const headerH = 150;
   const hasGuestRow = rows.some(r => r.isGuest);
   const showDeductions = waterFeeUsed > 0 || courtFeeUsed > 0;
@@ -1351,7 +1526,12 @@ function drawReport(canvas, reportView) {
     + (waterFeeUsed > 0 ? 28 : 0)
     + (courtFeeUsed > 0 ? 28 : 0)
     + (showDeductions ? 56 : 0);
-  const height = headerH + rowH * (rows.length + 1) + footerH;
+  const noteRowsH = rows.reduce((h, r) => {
+    if (r.paidBy) h += noteH;
+    if ((r.paidForNames || []).length > 0) h += noteH;
+    return h;
+  }, 0);
+  const height = headerH + rowH * (rows.length + 1) + noteRowsH + footerH;
 
   canvas.width = width * scale;
   canvas.height = height * scale;
@@ -1399,36 +1579,63 @@ function drawReport(canvas, reportView) {
   y += rowH;
 
   rows.forEach((r, idx) => {
-    if (!r.paid) {
+    const isCovered = !!r.paidBy;
+    const paidForNames = r.paidForNames || [];
+    const rowTotal = rowH + (isCovered ? noteH : 0) + (paidForNames.length > 0 ? noteH : 0);
+
+    if (isCovered) {
+      ctx.fillStyle = '#F5F5F3';
+      ctx.fillRect(16, y, width - 32, rowTotal);
+    } else if (!r.paid) {
       ctx.fillStyle = C.unpaidBg;
-      ctx.fillRect(16, y, width - 32, rowH);
+      ctx.fillRect(16, y, width - 32, rowTotal);
     }
-    const color = r.paid ? C.dark : C.red;
-    ctx.fillStyle = color;
+
+    const color = isCovered ? C.muted : (r.paid ? C.dark : C.red);
+    ctx.fillStyle = C.muted;
     ctx.font = '400 12px Inter, sans-serif';
     ctx.fillText(String(idx + 1), 26, y + rowH / 2 + 4);
+    ctx.fillStyle = color;
     ctx.font = '500 12px Inter, sans-serif';
     const name = r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name;
     ctx.fillText(name, 64, y + rowH / 2 + 4);
-    ctx.fillStyle = r.paid ? C.green : C.red;
+    ctx.fillStyle = isCovered ? C.muted : (r.paid ? C.green : C.red);
     ctx.font = '600 12px Inter, sans-serif';
-    ctx.fillText(r.paid ? '✓ Đã đóng' : '✗ Chưa đóng', 300, y + rowH / 2 + 4);
+    const statusLabel = isCovered ? '↙ Được trả thay' : (r.paid ? '✓ Đã đóng' : '✗ Chưa đóng');
+    ctx.fillText(statusLabel, 290, y + rowH / 2 + 4);
     ctx.textAlign = 'right';
     ctx.fillStyle = color;
     ctx.font = '400 12px Inter, sans-serif';
-    ctx.fillText(r.paid ? formatMoney(r.amount) : '—', width - 26, y + rowH / 2 + 4);
+    const amountLabel = isCovered ? '0đ' : (r.paid ? formatMoney(r.amount) : '—');
+    ctx.fillText(amountLabel, width - 26, y + rowH / 2 + 4);
     ctx.textAlign = 'left';
     y += rowH;
+
+    if (isCovered) {
+      ctx.font = '400 10px Inter, sans-serif';
+      ctx.fillStyle = C.muted;
+      ctx.fillText(`− ${r.paidBy}`, 70, y + 11);
+      y += noteH;
+    }
+    if (paidForNames.length > 0) {
+      ctx.font = '400 10px Inter, sans-serif';
+      ctx.fillStyle = '#2C6E9B';
+      const noteText = '+ ' + paidForNames.join(' + ');
+      const maxChars = 52;
+      ctx.fillText(noteText.length > maxChars ? noteText.slice(0, maxChars) + '…' : noteText, 70, y + 11);
+      y += noteH;
+    }
+
     ctx.strokeStyle = C.line;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(16, y); ctx.lineTo(width - 16, y); ctx.stroke();
   });
 
   y += 16;
-  const paidCount = rows.filter(r => r.paid).length;
-  const unpaidCount = rows.length - paidCount;
+  const paidCount = rows.filter(r => r.paid || r.paidBy).length;
+  const unpaidCount = rows.filter(r => !r.paid && !r.paidBy).length;
   const total = rows.filter(r => r.paid).reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const owed = unpaidCount * feeUsed;
+  const owed = rows.filter(r => !r.paid && !r.paidBy).reduce((s, r) => s + feeUsed * (1 + (r.paidForNames || []).length), 0);
 
   const summaryLine = (label, value, color) => {
     ctx.textAlign = 'left';
