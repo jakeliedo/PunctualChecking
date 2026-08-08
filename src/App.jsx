@@ -74,6 +74,8 @@ export default function App() {
   const [isLocked, setIsLocked] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const canvasRef = useRef(null);
+  // Prevents persist effect from writing stale checkins during a date switch
+  const dateLoadingRef = useRef(false);
 
   // ---------- Load ----------
   useEffect(() => {
@@ -95,12 +97,15 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload checkins when user switches to a different date
+  // Reload checkins when user switches to a different date.
+  // dateLoadingRef blocks the persist effect until this resolves.
   useEffect(() => {
     if (loading) return;
+    dateLoadingRef.current = true;
     storageGet(`day:${activeDateKey}`).then(day => {
       setCheckins(day?.checkins || []);
       setIsLocked(day?.locked || false);
+      dateLoadingRef.current = false;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDateKey]);
@@ -109,16 +114,16 @@ export default function App() {
   useEffect(() => { if (!loading) storageSet('members', members); }, [members, loading]);
   useEffect(() => { if (!loading) storageSet('fee-config', { fee, waterFee, courtFee }); }, [fee, waterFee, courtFee, loading]);
   useEffect(() => {
-    if (!loading) {
-      storageSet(`day:${activeDateKey}`, { checkins, locked: isLocked, waterFeeUsed: waterFee, courtFeeUsed: courtFee, savedAt: Date.now() });
-      // Optimistically add today's key to history list (storageSet handles Firestore meta)
-      setHistoryKeys(prev => {
-        const key = `day:${activeDateKey}`;
-        if (prev.includes(key)) return prev;
-        return [key, ...prev].sort().reverse();
-      });
-    }
-  }, [checkins, loading, activeDateKey, waterFee, isLocked]);
+    // Skip if: initial load not done, date switch in progress, or day is locked.
+    // Lock state changes are saved separately via handleLockToggle to avoid this guard.
+    if (!loading || dateLoadingRef.current || isLocked) return;
+    storageSet(`day:${activeDateKey}`, { checkins, locked: false, waterFeeUsed: waterFee, courtFeeUsed: courtFee, savedAt: Date.now() });
+    setHistoryKeys(prev => {
+      const key = `day:${activeDateKey}`;
+      if (prev.includes(key)) return prev;
+      return [key, ...prev].sort().reverse();
+    });
+  }, [checkins, loading, activeDateKey, waterFee]); // isLocked intentionally excluded — lock saves go through handleLockToggle
 
   // ---------- Derived ----------
   const attendanceRate = (m) => {
@@ -303,6 +308,19 @@ export default function App() {
     if (isLocked) return;
     const n = Number(value.replace(/[^\d]/g, '')) || 0;
     setCheckins(prev => prev.map(c => c.id === id ? { ...c, amount: n } : c));
+  };
+
+  // Toggles lock and writes directly to storage (bypasses the persist effect guard).
+  const handleLockToggle = () => {
+    const newLocked = !isLocked;
+    setIsLocked(newLocked);
+    storageSet(`day:${activeDateKey}`, {
+      checkins,
+      locked: newLocked,
+      waterFeeUsed: waterFee,
+      courtFeeUsed: courtFee,
+      savedAt: Date.now(),
+    });
   };
 
   const openReport = () => {
@@ -558,7 +576,7 @@ export default function App() {
       {showLockModal && (
         <LockModal
           isLocked={isLocked}
-          onConfirm={() => setIsLocked(prev => !prev)}
+          onConfirm={handleLockToggle}
           onClose={() => setShowLockModal(false)}
         />
       )}
