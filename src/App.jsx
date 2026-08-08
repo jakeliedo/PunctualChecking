@@ -116,7 +116,7 @@ export default function App() {
   useEffect(() => {
     // Skip if: initial load not done, date switch in progress, or day is locked.
     // Lock state changes are saved separately via handleLockToggle to avoid this guard.
-    if (!loading || dateLoadingRef.current || isLocked) return;
+    if (loading || dateLoadingRef.current || isLocked) return;
     storageSet(`day:${activeDateKey}`, { checkins, locked: false, waterFeeUsed: waterFee, courtFeeUsed: courtFee, savedAt: Date.now() });
     setHistoryKeys(prev => {
       const key = `day:${activeDateKey}`;
