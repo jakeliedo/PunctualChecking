@@ -222,10 +222,17 @@ export default function App() {
 
   const addGuest = () => {
     if (isLocked) return;
+    const lines = newName.split('\n').map(l => l.trim()).filter(Boolean);
     const guestCount = checkins.filter(c => c.isGuest).length;
-    const baseName = newName.trim() || `Khách lẻ #${guestCount + 1}`;
-    const name = `${baseName} **`;
-    setCheckins(prev => [...prev, { id: newId('guest'), name, isGuest: true, paid: false, method: null, amount: 0, paidBy: null, paidForNames: [] }]);
+    const toAdd = lines.length > 0 ? lines : [`Khách lẻ #${guestCount + 1}`];
+    setCheckins(prev => [
+      ...prev,
+      ...toAdd.map((baseName, i) => ({
+        id: newId(`guest${i}`),
+        name: `${baseName} **`,
+        isGuest: true, paid: false, method: null, amount: 0, paidBy: null, paidForNames: [],
+      })),
+    ]);
     setNewName('');
     setShowAddGuest(false);
   };
@@ -518,13 +525,14 @@ export default function App() {
       {showAddGuest && (
         <NameModal
           title="Thêm khách vãng lai"
-          placeholder="Tên (không bắt buộc)"
+          placeholder={"Tên khách (mỗi dòng một người)"}
           value={newName}
           setValue={setNewName}
           onCancel={() => { setShowAddGuest(false); setNewName(''); }}
           onConfirm={addGuest}
           confirmLabel="Thêm vào sân hôm nay"
-          hint="Tên sẽ tự động thêm dấu ** phía sau để phân biệt với thành viên chính thức, kể cả trong ảnh báo cáo."
+          hint="Nhập nhiều tên bằng cách xuống dòng. Tên tự động thêm ** phía sau."
+          multiline
         />
       )}
       {showSettings && (
@@ -949,20 +957,34 @@ function ReportsTab({ historyKeys, onOpen, todayKey, onDelete }) {
   );
 }
 
-function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, confirmLabel, hint, error }) {
+function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, confirmLabel, hint, error, multiline }) {
+  const inputStyle = { fontSize: 16, border: `1px solid ${error ? COLORS.red : COLORS.line}` };
   return (
     <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={onCancel}>
       <div onClick={e => e.stopPropagation()} className="w-full rounded-t-2xl p-5" style={{ background: COLORS.card, maxWidth: 480 }}>
         <div style={{ fontWeight: 700, fontSize: 16, marginBottom: hint ? 4 : 12 }}>{title}</div>
         {hint && <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>{hint}</div>}
-        <input
-          autoFocus
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          placeholder={placeholder}
-          className="w-full px-3 py-2.5 rounded-lg text-sm mb-1 outline-none"
-          style={{ border: `1px solid ${error ? COLORS.red : COLORS.line}` }}
-        />
+        {multiline ? (
+          <textarea
+            autoFocus
+            rows={4}
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder={placeholder}
+            className="w-full px-3 py-2.5 rounded-lg mb-1 outline-none resize-none"
+            style={inputStyle}
+          />
+        ) : (
+          <input
+            autoFocus
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onConfirm(); }}
+            placeholder={placeholder}
+            className="w-full px-3 py-2.5 rounded-lg mb-1 outline-none"
+            style={inputStyle}
+          />
+        )}
         {error && <div style={{ color: COLORS.red, fontSize: 12, marginBottom: 8 }}>{error}</div>}
         {!error && <div style={{ marginBottom: 10 }} />}
         <div className="flex gap-2">
