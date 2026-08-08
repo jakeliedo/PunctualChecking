@@ -17,13 +17,33 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // ---------- Room ID ----------
-// Priority: URL ?room= param → localStorage → generate new
+// iOS separates localStorage between Safari and PWA (standalone) contexts.
+// Cookies ARE shared between them, so we use cookies as a bridge.
+
+function _getRoomCookie() {
+  try {
+    const m = document.cookie.match(/(?:^|; )roomId=([a-f0-9]+)/);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
+function _setRoomCookie(id) {
+  try {
+    const exp = new Date();
+    exp.setFullYear(exp.getFullYear() + 10);
+    // path=/ ensures the cookie is accessible from both Safari and the PWA's start_url
+    document.cookie = `roomId=${id}; expires=${exp.toUTCString()}; path=/; SameSite=Lax`;
+  } catch {}
+}
+
+// Priority: URL ?room= param → localStorage → cookie (Safari↔PWA bridge) → generate new
 export function getRoomId() {
   const params = new URLSearchParams(window.location.search);
   const fromUrl = params.get('room');
   if (fromUrl) {
     localStorage.setItem('roomId', fromUrl);
-    // Clean ?room= from URL bar (already saved in localStorage, no need to expose it)
+    _setRoomCookie(fromUrl);
+    // Clean ?room= from URL bar (already saved, no need to expose it)
     params.delete('room');
     const clean = params.toString()
       ? `${window.location.pathname}?${params}`
@@ -32,11 +52,21 @@ export function getRoomId() {
     return fromUrl;
   }
   const stored = localStorage.getItem('roomId');
-  if (stored) return stored;
+  if (stored) {
+    _setRoomCookie(stored); // keep cookie in sync with localStorage
+    return stored;
+  }
+  // Cookie fallback: bridges the gap when PWA and Safari have isolated localStorage
+  const fromCookie = _getRoomCookie();
+  if (fromCookie) {
+    localStorage.setItem('roomId', fromCookie);
+    return fromCookie;
+  }
   // First ever launch — generate a random 16-char hex ID
   const bytes = crypto.getRandomValues(new Uint8Array(8));
   const newId = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
   localStorage.setItem('roomId', newId);
+  _setRoomCookie(newId);
   return newId;
 }
 
