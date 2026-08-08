@@ -71,6 +71,8 @@ export default function App() {
   const [reportImgUrl, setReportImgUrl] = useState(null);
   const [historyKeys, setHistoryKeys] = useState([]);
   const [showPayFor, setShowPayFor] = useState(null);
+  const [isLocked, setIsLocked] = useState(false);
+  const [showLockModal, setShowLockModal] = useState(false);
   const canvasRef = useRef(null);
 
   // ---------- Load ----------
@@ -85,6 +87,7 @@ export default function App() {
       setWaterFee(f?.waterFee ?? 15000);
       setCourtFee(f?.courtFee ?? 375000);
       setCheckins(day?.checkins || []);
+      setIsLocked(day?.locked || false);
       const keys = await listDayKeys();
       setHistoryKeys(keys);
       setLoading(false);
@@ -97,6 +100,7 @@ export default function App() {
     if (loading) return;
     storageGet(`day:${activeDateKey}`).then(day => {
       setCheckins(day?.checkins || []);
+      setIsLocked(day?.locked || false);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeDateKey]);
@@ -106,7 +110,7 @@ export default function App() {
   useEffect(() => { if (!loading) storageSet('fee-config', { fee, waterFee, courtFee }); }, [fee, waterFee, courtFee, loading]);
   useEffect(() => {
     if (!loading) {
-      storageSet(`day:${activeDateKey}`, { checkins, waterFeeUsed: waterFee, courtFeeUsed: courtFee, savedAt: Date.now() });
+      storageSet(`day:${activeDateKey}`, { checkins, locked: isLocked, waterFeeUsed: waterFee, courtFeeUsed: courtFee, savedAt: Date.now() });
       // Optimistically add today's key to history list (storageSet handles Firestore meta)
       setHistoryKeys(prev => {
         const key = `day:${activeDateKey}`;
@@ -114,7 +118,7 @@ export default function App() {
         return [key, ...prev].sort().reverse();
       });
     }
-  }, [checkins, loading, activeDateKey, waterFee]);
+  }, [checkins, loading, activeDateKey, waterFee, isLocked]);
 
   // ---------- Derived ----------
   const attendanceRate = (m) => {
@@ -201,6 +205,7 @@ export default function App() {
   const isCheckedIn = (member) => checkins.some(c => c.id === member.id || normalize(c.name) === normalize(member.name));
 
   const toggleRosterCheckin = (member) => {
+    if (isLocked) return;
     const existing = checkins.find(c => c.id === member.id || normalize(c.name) === normalize(member.name));
     if (existing) {
       setCheckins(prev => prev.filter(c => c !== existing));
@@ -211,6 +216,7 @@ export default function App() {
   };
 
   const addGuest = () => {
+    if (isLocked) return;
     const guestCount = checkins.filter(c => c.isGuest).length;
     const baseName = newName.trim() || `Khách lẻ #${guestCount + 1}`;
     const name = `${baseName} **`;
@@ -220,6 +226,7 @@ export default function App() {
   };
 
   const removeFromToday = (id) => {
+    if (isLocked) return;
     setCheckins(prev => {
       const target = prev.find(c => c.id === id);
       if (!target) return prev.filter(c => c.id !== id);
@@ -233,6 +240,7 @@ export default function App() {
   };
 
   const setPaid = (id, method) => {
+    if (isLocked) return;
     setCheckins(prev => prev.map(c => {
       if (c.id !== id) return c;
       if (c.paid && c.method === method) return { ...c, paid: false, method: null, amount: 0 };
@@ -246,6 +254,7 @@ export default function App() {
   };
 
   const setPayFor = (targetId, payerName) => {
+    if (isLocked) return;
     setCheckins(prev => {
       const target = prev.find(c => c.id === targetId);
       if (!target) return prev;
@@ -291,6 +300,7 @@ export default function App() {
   };
 
   const setAmount = (id, value) => {
+    if (isLocked) return;
     const n = Number(value.replace(/[^\d]/g, '')) || 0;
     setCheckins(prev => prev.map(c => c.id === id ? { ...c, amount: n } : c));
   };
@@ -379,8 +389,14 @@ export default function App() {
       <div style={{ background: COLORS.navy, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)', paddingBottom: 16, paddingLeft: 16, paddingRight: 16 }}>
         <div className="flex items-start justify-between mb-3">
           <div style={{ paddingTop: 4 }}>
-            <div style={{ color: activeDateKey !== todayKey ? COLORS.yellow : '#8FA3B8', fontSize: 12 }}>
-              {activeDateKey !== todayKey ? `Đang nhập: ${dateKeyToVN(activeDateKey)}` : formatVNDate(today)}
+            <div className="flex items-center gap-1.5" style={{ color: activeDateKey !== todayKey ? COLORS.yellow : '#8FA3B8', fontSize: 12 }}>
+              <span>{activeDateKey !== todayKey ? `Đang nhập: ${dateKeyToVN(activeDateKey)}` : formatVNDate(today)}</span>
+              <button onClick={() => setShowLockModal(true)} className="flex items-center p-0.5 rounded">
+                {isLocked
+                  ? <Lock size={13} style={{ color: COLORS.yellow }} />
+                  : <LockOpen size={13} style={{ color: '#8FA3B8' }} />
+                }
+              </button>
             </div>
             <div className="score-num" style={{ color: 'white', fontSize: 20 }}>SÂN BÓNG CHUYỀN</div>
           </div>
@@ -413,6 +429,7 @@ export default function App() {
           <TodayTab
             checkins={checkins}
             fee={fee}
+            isLocked={isLocked}
             onRemove={removeFromToday}
             onPaid={setPaid}
             onAmount={setAmount}
@@ -539,6 +556,13 @@ export default function App() {
           onClose={() => setShowPayFor(null)}
         />
       )}
+      {showLockModal && (
+        <LockModal
+          isLocked={isLocked}
+          onConfirm={() => setIsLocked(prev => !prev)}
+          onClose={() => setShowLockModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -563,7 +587,7 @@ function TabButton({ icon, label, active, onClick }) {
   );
 }
 
-function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor }) {
+function TodayTab({ checkins, fee, isLocked, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor }) {
   const sorted = sortMembersFirst(checkins);
   if (checkins.length === 0) {
     return (
@@ -579,14 +603,22 @@ function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAdd
   }
   return (
     <div className="px-3 pt-3">
-      <div className="flex gap-2 mb-3">
-        <button onClick={onAddFromRoster} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-sm font-medium" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
-          <Plus size={15} /> Từ danh sách
-        </button>
-        <button onClick={onAddGuest} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-sm font-medium" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
-          <UserPlus size={15} /> Khách vãng lai
-        </button>
-      </div>
+      {isLocked && (
+        <div className="flex items-center gap-2 mb-3 px-3 py-2.5 rounded-xl" style={{ background: '#FFF8E1', border: `1px solid ${COLORS.yellow}` }}>
+          <Lock size={14} style={{ color: COLORS.brown, flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: COLORS.brown }}>Báo cáo đã khoá. Bấm 🔒 ở trên để chỉnh sửa.</span>
+        </div>
+      )}
+      {!isLocked && (
+        <div className="flex gap-2 mb-3">
+          <button onClick={onAddFromRoster} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-sm font-medium" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
+            <Plus size={15} /> Từ danh sách
+          </button>
+          <button onClick={onAddGuest} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-sm font-medium" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
+            <UserPlus size={15} /> Khách vãng lai
+          </button>
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         {sorted.map((c, idx) => {
           const isCovered = !!c.paidBy;
@@ -626,6 +658,7 @@ function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAdd
               )}
 
               {/* Payment row */}
+              <div style={{ pointerEvents: isLocked ? 'none' : 'auto', opacity: isLocked ? 0.45 : 1 }}>
               {isFullyCovered ? (
                 <div className="flex items-center gap-2">
                   <span style={{ fontSize: 12, color: COLORS.muted }}>Được trả thay</span>
@@ -661,6 +694,7 @@ function TodayTab({ checkins, fee, onRemove, onPaid, onAmount, onAddGuest, onAdd
                   )}
                 </div>
               )}
+              </div>
             </div>
           );
         })}
@@ -1121,6 +1155,64 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
 }
 
 const UNLOCK_CODE = '6648';
+
+function LockModal({ isLocked, onConfirm, onClose }) {
+  const [pin, setPin] = useState('');
+  const [pinError, setPinError] = useState(false);
+
+  const confirm = () => {
+    if (pin === UNLOCK_CODE) {
+      onConfirm();
+      onClose();
+    } else {
+      setPinError(true);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} className="w-full rounded-t-2xl p-5" style={{ background: COLORS.card, maxWidth: 480 }}>
+        <div className="flex items-center gap-2 mb-1">
+          {isLocked
+            ? <LockOpen size={18} style={{ color: COLORS.green }} />
+            : <Lock size={18} style={{ color: COLORS.navy }} />
+          }
+          <span style={{ fontWeight: 700, fontSize: 15 }}>
+            {isLocked ? 'Mở khoá báo cáo?' : 'Khoá báo cáo?'}
+          </span>
+        </div>
+        <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 12 }}>
+          {isLocked
+            ? 'Nhập mã để cho phép chỉnh sửa lại.'
+            : 'Khoá sẽ ngăn mọi chỉnh sửa dữ liệu ngày này. Nhập mã để xác nhận.'}
+        </div>
+        <input
+          autoFocus
+          value={pin}
+          onChange={e => { setPin(e.target.value.replace(/[^\d]/g, '').slice(0, 4)); setPinError(false); }}
+          inputMode="numeric"
+          type="password"
+          placeholder="Mã 4 số"
+          className="w-full px-3 py-2.5 rounded-lg text-sm mb-1 outline-none"
+          style={{ border: `1px solid ${pinError ? COLORS.red : COLORS.line}` }}
+          onKeyDown={e => e.key === 'Enter' && confirm()}
+        />
+        {pinError && <div style={{ color: COLORS.red, fontSize: 11, marginBottom: 6 }}>Sai mã, thử lại.</div>}
+        {!pinError && <div style={{ marginBottom: 10 }} />}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>Huỷ</button>
+          <button
+            onClick={confirm}
+            className="flex-1 py-2.5 rounded-lg text-sm font-medium"
+            style={{ background: isLocked ? COLORS.green : COLORS.navy, color: 'white' }}
+          >
+            {isLocked ? 'Mở khoá' : 'Khoá lại'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ImportModal({ value, setValue, onCancel, onConfirm }) {
   const [replaceAll, setReplaceAll] = useState(false);
