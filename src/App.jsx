@@ -1410,12 +1410,8 @@ function ReportModal({ reportView, canvasRef, imgUrl, onClose, onDownload }) {
 function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
   const [selected, setSelected] = useState(new Set());
   const [dayData, setDayData] = useState({});
-  const [courtFeePerDay, setCourtFeePerDay] = useState(defaultCourtFee);
-  const [editingCourt, setEditingCourt] = useState(false);
-  const [courtInput, setCourtInput] = useState(String(defaultCourtFee));
   const settlementCanvasRef = useRef(null);
 
-  // Load all day data from Firestore (falls back to localStorage if offline)
   useEffect(() => {
     if (historyKeys.length === 0) return;
     Promise.all(historyKeys.map(k => storageGet(k).then(v => [k, v]))).then(entries => {
@@ -1437,42 +1433,37 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
   const selectAll = () => setSelected(new Set(historyKeys));
   const clearAll = () => setSelected(new Set());
 
-  // Totals across selected days
-  const totals = [...selected].reduce((acc, key) => {
-    const d = dayData[key];
-    if (!d) return acc;
-    const collected = (d.checkins || []).filter(c => c.paid).reduce((s, c) => s + (Number(c.amount) || 0), 0);
-    const unpaid = (d.checkins || []).filter(c => !c.paid).length;
-    return {
-      collected: acc.collected + collected,
-      water: acc.water + (d.waterFeeUsed || 0),
-      days: acc.days + 1,
-      people: acc.people + (d.checkins || []).length,
-      unpaid: acc.unpaid + unpaid,
-    };
-  }, { collected: 0, water: 0, days: 0, people: 0, unpaid: 0 });
+  // Per-day stats using the actual fees saved in each report
+  const selectedDays = [...selected].sort().map(key => {
+    const d = dayData[key] || {};
+    const checkins = d.checkins || [];
+    const collected = checkins.filter(c => c.paid).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const unpaid = checkins.filter(c => !c.paid && (!c.paidBy || (c.paidForNames || []).length > 0)).length;
+    const water = d.waterFeeUsed || 0;
+    const court = d.courtFeeUsed ?? defaultCourtFee;
+    const net = collected - water - court;
+    return { key, collected, unpaid, water, court, net, count: checkins.length, locked: d.locked };
+  });
 
-  const netPool = totals.collected - totals.water;
-  const courtTotal = totals.days * courtFeePerDay;
-  const balance = netPool - courtTotal;
-
-  const saveCourt = () => {
-    const v = Number(courtInput.replace(/[^\d]/g, ''));
-    if (v > 0) setCourtFeePerDay(v);
-    setEditingCourt(false);
-  };
+  const totals = selectedDays.reduce((acc, d) => ({
+    collected: acc.collected + d.collected,
+    water: acc.water + d.water,
+    court: acc.court + d.court,
+    net: acc.net + d.net,
+    people: acc.people + d.count,
+    unpaid: acc.unpaid + d.unpaid,
+  }), { collected: 0, water: 0, court: 0, net: 0, people: 0, unpaid: 0 });
 
   const exportSettlementImage = () => {
-    if (!settlementCanvasRef.current || totals.days === 0) return;
+    if (!settlementCanvasRef.current || selectedDays.length === 0) return;
     const canvas = settlementCanvasRef.current;
-    const selectedDates = [...selected].sort().map(k => dateKeyToVN(k.split(':')[1]));
-    drawSettlement(canvas, { selectedDates, totals, netPool, courtFeePerDay, courtTotal, balance });
-    const filename = `quyet-toan-${totals.days}ngay.png`;
+    drawSettlement(canvas, { selectedDays, totals });
+    const filename = `quyet-toan-${selectedDays.length}ngay.png`;
     if (navigator.canShare) {
       canvas.toBlob(async (blob) => {
         const file = new File([blob], filename, { type: 'image/png' });
         if (navigator.canShare({ files: [file] })) {
-          try { await navigator.share({ files: [file], title: `Quyết toán ${totals.days} ngày` }); return; }
+          try { await navigator.share({ files: [file], title: `Quyết toán ${selectedDays.length} ngày` }); return; }
           catch (e) { if (e.name === 'AbortError') return; }
         }
         const url = canvas.toDataURL('image/png');
@@ -1520,35 +1511,18 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
             {selected.size === 0 ? 'ngày chưa chọn' : selected.size === 10 ? 'ngày ✓ đủ 1 chu kỳ' : `/ 10 ngày`}
           </span>
         </div>
-        <button
-          onClick={clearAll}
-          style={{ fontSize: 12, color: COLORS.muted }}
-        >
-          Bỏ chọn tất cả
-        </button>
+        <button onClick={clearAll} style={{ fontSize: 12, color: COLORS.muted }}>Bỏ chọn tất cả</button>
       </div>
 
       {/* Quick-select buttons */}
       <div className="flex gap-2 mb-3 flex-wrap">
-        <button
-          onClick={() => selectRecent(10)}
-          className="px-3 py-1.5 rounded-full text-xs font-medium"
-          style={{ background: COLORS.navy, color: 'white' }}
-        >
+        <button onClick={() => selectRecent(10)} className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ background: COLORS.navy, color: 'white' }}>
           10 ngày gần nhất
         </button>
-        <button
-          onClick={() => selectRecent(5)}
-          className="px-3 py-1.5 rounded-full text-xs font-medium"
-          style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
-        >
+        <button onClick={() => selectRecent(5)} className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.text }}>
           5 ngày gần nhất
         </button>
-        <button
-          onClick={selectAll}
-          className="px-3 py-1.5 rounded-full text-xs font-medium"
-          style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.text }}
-        >
+        <button onClick={selectAll} className="px-3 py-1.5 rounded-full text-xs font-medium" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, color: COLORS.text }}>
           Tất cả ({historyKeys.length})
         </button>
       </div>
@@ -1589,94 +1563,83 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
         </div>
       )}
 
-      {/* Summary card — only show when days selected */}
-      {totals.days > 0 && (
-        <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${COLORS.line}` }}>
-          {/* Header */}
-          <div className="px-4 py-3" style={{ background: COLORS.navy }}>
-            <div className="score-num" style={{ color: 'white', fontSize: 13 }}>
-              TỔNG KẾT {totals.days} NGÀY
-            </div>
-            <div style={{ color: '#8FA3B8', fontSize: 11, marginTop: 2 }}>
-              {totals.people} lượt người · {totals.unpaid} chưa đóng
-            </div>
-          </div>
-
-          {/* Rows */}
-          <div style={{ background: COLORS.card }}>
-            <SummaryRow label="Tổng tiền đã thu" value={formatMoney(totals.collected)} color={COLORS.green} bold />
-            <SummaryRow label="Tổng tiền nước đã trừ" value={`−${formatMoney(totals.water)}`} color={COLORS.brown} />
-            <SummaryRow
-              label="Quỹ ròng"
-              value={formatMoney(netPool)}
-              color={netPool >= 0 ? COLORS.green : COLORS.red}
-              bold
-              highlight
-            />
-
-            {/* Court fee row — editable */}
-            <div className="flex items-center justify-between px-4 py-3" style={{ borderTop: `2px dashed ${COLORS.line}` }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Tiền sân ({totals.days} ngày)</div>
-                {editingCourt ? (
-                  <div className="flex items-center gap-1 mt-1">
-                    <input
-                      autoFocus
-                      value={courtInput}
-                      onChange={e => setCourtInput(e.target.value.replace(/[^\d]/g, ''))}
-                      onBlur={saveCourt}
-                      onKeyDown={e => e.key === 'Enter' && saveCourt()}
-                      inputMode="numeric"
-                      className="px-2 py-1 rounded text-xs outline-none"
-                      style={{ width: 96, border: `1px solid ${COLORS.blue}`, color: COLORS.text }}
-                    />
-                    <span style={{ fontSize: 11, color: COLORS.muted }}>đ/ngày</span>
-                  </div>
-                ) : (
-                  <button onClick={() => { setCourtInput(String(courtFeePerDay)); setEditingCourt(true); }} style={{ fontSize: 11, color: COLORS.blue, marginTop: 2 }}>
-                    {formatMoney(courtFeePerDay)}/ngày · chỉnh
-                  </button>
-                )}
-              </div>
-              <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.red }}>
-                −{formatMoney(courtTotal)}
-              </span>
-            </div>
-
-            {/* Final balance */}
-            <div
-              className="px-4 py-4 flex items-center justify-between"
-              style={{ background: balance >= 0 ? '#EAF3EC' : '#FBEEEE' }}
-            >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
-                  {balance >= 0 ? 'Quỹ còn dư' : 'CÒN THIẾU CHỦ SÂN'}
+      {/* Per-day detail cards + grand total — only show when days selected */}
+      {selectedDays.length > 0 && (
+        <>
+          {selectedDays.map(day => (
+            <div key={day.key} className="rounded-xl overflow-hidden mb-3" style={{ border: `1px solid ${COLORS.line}` }}>
+              {/* Day header */}
+              <div className="px-3 py-2 flex items-center justify-between" style={{ background: COLORS.navy }}>
+                <div className="flex items-center gap-1.5">
+                  <span style={{ fontWeight: 700, fontSize: 14, color: 'white' }}>{formatDayLabel(day.key)}</span>
+                  {day.locked && <Lock size={11} style={{ color: COLORS.yellow }} />}
                 </div>
-                {balance < 0 && (
-                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
-                    Cần bù thêm từ quỹ hoặc thu thêm
-                  </div>
-                )}
+                <span style={{ fontSize: 12, color: '#8FA3B8' }}>
+                  {day.count} người{day.unpaid > 0 ? ` · ${day.unpaid} nợ` : ''}
+                </span>
               </div>
-              <span style={{ fontSize: 22, fontWeight: 700, color: balance >= 0 ? COLORS.green : COLORS.red }} className="score-num">
-                {balance < 0 ? '' : '+'}{formatMoney(balance)}
-              </span>
+              {/* Day rows */}
+              <div style={{ background: COLORS.card }}>
+                <div className="flex justify-between px-3 py-1.5" style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+                  <span style={{ fontSize: 13, color: COLORS.muted }}>Thu vào</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.green }}>+{formatMoney(day.collected)}</span>
+                </div>
+                <div className="flex justify-between px-3 py-1.5" style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+                  <span style={{ fontSize: 13, color: COLORS.muted }}>Tiền nước</span>
+                  <span style={{ fontSize: 13, color: day.water > 0 ? COLORS.brown : COLORS.muted }}>
+                    {day.water > 0 ? `−${formatMoney(day.water)}` : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between px-3 py-1.5" style={{ borderBottom: `1px dashed ${COLORS.line}` }}>
+                  <span style={{ fontSize: 13, color: COLORS.muted }}>Tiền sân</span>
+                  <span style={{ fontSize: 13, color: COLORS.red }}>−{formatMoney(day.court)}</span>
+                </div>
+                <div className="flex justify-between px-3 py-2.5" style={{ background: day.net >= 0 ? '#EAF3EC' : '#FBEEEE' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>Quỹ ngày</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: day.net >= 0 ? COLORS.green : COLORS.red }}>
+                    {day.net >= 0 ? '+' : ''}{formatMoney(day.net)}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
 
-          {/* Export button */}
-          <button
-            onClick={exportSettlementImage}
-            className="w-full flex items-center justify-center gap-2 py-3"
-            style={{ background: COLORS.yellow }}
-          >
-            <Download size={16} color={COLORS.navy} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.navy }}>Xuất ảnh quyết toán</span>
-          </button>
-        </div>
+          {/* Grand total */}
+          <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${COLORS.line}` }}>
+            <div className="px-4 py-3" style={{ background: COLORS.navy }}>
+              <div className="score-num" style={{ color: 'white', fontSize: 13 }}>
+                TỔNG KẾT {selectedDays.length} NGÀY
+              </div>
+              <div style={{ color: '#8FA3B8', fontSize: 11, marginTop: 2 }}>
+                {totals.people} lượt người · {totals.unpaid} chưa đóng
+              </div>
+            </div>
+            <div style={{ background: COLORS.card }}>
+              <SummaryRow label="Tổng thu vào" value={`+${formatMoney(totals.collected)}`} color={COLORS.green} bold />
+              <SummaryRow label="Tổng tiền nước" value={totals.water > 0 ? `−${formatMoney(totals.water)}` : '—'} color={COLORS.brown} />
+              <SummaryRow label="Tổng tiền sân" value={`−${formatMoney(totals.court)}`} color={COLORS.red} />
+              <div className="flex items-center justify-between px-4 py-4" style={{ background: totals.net >= 0 ? '#EAF3EC' : '#FBEEEE' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
+                    {totals.net >= 0 ? 'Quỹ còn dư' : 'Quỹ bị âm'}
+                  </div>
+                  {totals.net < 0 && (
+                    <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Cần bù thêm từ quỹ hoặc thu thêm</div>
+                  )}
+                </div>
+                <span style={{ fontSize: 22, fontWeight: 700, color: totals.net >= 0 ? COLORS.green : COLORS.red }} className="score-num">
+                  {totals.net >= 0 ? '+' : ''}{formatMoney(totals.net)}
+                </span>
+              </div>
+            </div>
+            <button onClick={exportSettlementImage} className="w-full flex items-center justify-center gap-2 py-3" style={{ background: COLORS.yellow }}>
+              <Download size={16} color={COLORS.navy} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.navy }}>Xuất ảnh quyết toán</span>
+            </button>
+          </div>
+        </>
       )}
 
-      {/* Hidden canvas for settlement export */}
       <canvas ref={settlementCanvasRef} style={{ display: 'none' }} />
     </div>
   );
@@ -1929,104 +1892,133 @@ function drawReport(canvas, reportView) {
   ctx.fillText(`Xuất file lúc ${timeStr} ${dateStr}`, width / 2, y);
 }
 
-function drawSettlement(canvas, { selectedDates, totals, netPool, courtFeePerDay, courtTotal, balance }) {
+function drawSettlement(canvas, { selectedDays, totals }) {
   const scale = 2;
-  const width = 480;
-  const now = new Date();
+  const W = 480;
+  const PAD = 16;
   const C = {
     dark: '#1C2321', muted: '#7C8580', green: '#2E8B57', red: '#C0392B',
     line: '#E4E1DA', navy: '#1C2B3A', yellow: '#F2B705', brown: '#8C6A46',
+    white: '#FFFFFF', bg: '#F7F5F0',
   };
 
-  const rowH = 30;
-  const dateRows = Math.ceil(selectedDates.length / 3);
-  const height = 70 + dateRows * rowH + 280;
-  canvas.width = width * scale;
+  // Height: header(70) + N * dayCard(108) + totalSection(148) + footer(32)
+  const DAY_H = 108;
+  const height = 70 + selectedDays.length * DAY_H + 148 + 32;
+  canvas.width = W * scale;
   canvas.height = height * scale;
   const ctx = canvas.getContext('2d');
   ctx.scale(scale, scale);
 
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, height);
 
-  // Header
+  // === Main header ===
   ctx.fillStyle = C.navy;
-  ctx.fillRect(0, 0, width, 60);
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, W, 60);
+  ctx.fillStyle = C.white;
   ctx.font = '700 18px Oswald, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`QUYẾT TOÁN ${totals.days} NGÀY`, width / 2, 28);
+  ctx.fillText(`QUYẾT TOÁN ${selectedDays.length} NGÀY`, W / 2, 28);
   ctx.font = '400 12px Inter, sans-serif';
   ctx.fillStyle = '#B9C6D1';
-  ctx.fillText(`${totals.people} lượt người · ${totals.unpaid} chưa đóng`, width / 2, 48);
+  ctx.fillText(`${totals.people} lượt người · ${totals.unpaid} chưa đóng`, W / 2, 48);
 
-  // Dates grid
-  let y = 72;
-  ctx.textAlign = 'left';
-  ctx.font = '400 11px Inter, sans-serif';
-  ctx.fillStyle = C.muted;
-  const cols = 3;
-  const colW = (width - 32) / cols;
-  selectedDates.forEach((d, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    ctx.fillStyle = '#2C6E9B22';
-    const rx = 16 + col * colW, ry = y + row * rowH;
-    ctx.fillRect(rx, ry - 14, colW - 4, 22);
-    ctx.fillStyle = C.dark;
-    ctx.font = '500 11px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(d, rx + colW / 2 - 2, ry - 1);
+  let y = 70;
+
+  // === Per-day cards ===
+  selectedDays.forEach(day => {
+    const dstr = day.key.split(':')[1] || '';
+    const [yr, mo, da] = dstr.split('-');
+    const label = `${da}/${mo}/${yr}`;
+    const cardW = W - PAD * 2;
+
+    // Day header strip
+    ctx.fillStyle = C.navy;
+    ctx.fillRect(PAD, y, cardW, 26);
+    ctx.font = '700 12px Inter, sans-serif';
+    ctx.fillStyle = C.white;
+    ctx.textAlign = 'left';
+    ctx.fillText(label + (day.locked ? '  🔒' : ''), PAD + 10, y + 17);
+    ctx.font = '400 11px Inter, sans-serif';
+    ctx.fillStyle = '#8FA3B8';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${day.count} người${day.unpaid > 0 ? ` · ${day.unpaid} nợ` : ''}`, PAD + cardW - 10, y + 17);
+
+    // Rows background
+    ctx.fillStyle = C.white;
+    ctx.fillRect(PAD, y + 26, cardW, DAY_H - 26 - 24);
+
+    let ry = y + 26;
+    const ROW = 20;
+    const drawRow = (label2, value, color) => {
+      ctx.font = '400 12px Inter, sans-serif';
+      ctx.fillStyle = C.dark; ctx.textAlign = 'left';
+      ctx.fillText(label2, PAD + 10, ry + ROW - 6);
+      ctx.fillStyle = color; ctx.textAlign = 'right';
+      ctx.fillText(value, PAD + cardW - 10, ry + ROW - 6);
+      ctx.strokeStyle = C.line; ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(PAD, ry + ROW); ctx.lineTo(PAD + cardW, ry + ROW); ctx.stroke();
+      ry += ROW;
+    };
+    drawRow('Thu vào', `+${formatMoney(day.collected)}`, C.green);
+    drawRow('Tiền nước', day.water > 0 ? `−${formatMoney(day.water)}` : '—', C.brown);
+    drawRow('Tiền sân', `−${formatMoney(day.court)}`, C.red);
+
+    // Net row
+    ctx.fillStyle = day.net >= 0 ? '#EAF3EC' : '#FBEEEE';
+    ctx.fillRect(PAD, ry, cardW, 24);
+    ctx.font = '700 12px Inter, sans-serif';
+    ctx.fillStyle = C.dark; ctx.textAlign = 'left';
+    ctx.fillText('Quỹ ngày', PAD + 10, ry + 16);
+    ctx.fillStyle = day.net >= 0 ? C.green : C.red; ctx.textAlign = 'right';
+    ctx.fillText(`${day.net >= 0 ? '+' : ''}${formatMoney(day.net)}`, PAD + cardW - 10, ry + 16);
+
+    y += DAY_H;
   });
 
-  y += dateRows * rowH + 12;
-  ctx.textAlign = 'left';
+  // === Grand total section ===
+  const cardW = W - PAD * 2;
+  ctx.fillStyle = C.navy;
+  ctx.fillRect(PAD, y, cardW, 28);
+  ctx.font = '700 13px Oswald, sans-serif';
+  ctx.fillStyle = C.white; ctx.textAlign = 'left';
+  ctx.fillText(`TỔNG KẾT ${selectedDays.length} NGÀY`, PAD + 10, y + 19);
+  y += 28;
 
-  // Separator
-  ctx.strokeStyle = C.line; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(16, y); ctx.lineTo(width - 16, y); ctx.stroke();
-  y += 20;
+  ctx.fillStyle = C.white;
+  ctx.fillRect(PAD, y, cardW, 72);
 
-  const sLine = (label, value, color, bold) => {
-    ctx.font = bold ? '700 14px Inter, sans-serif' : '400 13px Inter, sans-serif';
+  const sLine = (lbl, val, color, bold) => {
+    ctx.font = bold ? '700 13px Inter, sans-serif' : '400 13px Inter, sans-serif';
     ctx.fillStyle = C.dark; ctx.textAlign = 'left';
-    ctx.fillText(label, 24, y);
+    ctx.fillText(lbl, PAD + 10, y + 17);
     ctx.fillStyle = color; ctx.textAlign = 'right';
-    ctx.fillText(value, width - 24, y);
-    y += 26;
+    ctx.fillText(val, PAD + cardW - 10, y + 17);
+    ctx.strokeStyle = C.line; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(PAD, y + 24); ctx.lineTo(PAD + cardW, y + 24); ctx.stroke();
+    y += 24;
   };
+  sLine('Tổng thu vào', `+${formatMoney(totals.collected)}`, C.green, true);
+  sLine('Tổng tiền nước', totals.water > 0 ? `−${formatMoney(totals.water)}` : '—', C.brown, false);
+  sLine('Tổng tiền sân', `−${formatMoney(totals.court)}`, C.red, false);
 
-  sLine('Tổng tiền đã thu', formatMoney(totals.collected), C.green, true);
-  sLine('Tổng tiền nước', '−' + formatMoney(totals.water), C.brown, false);
-
-  y += 4;
-  ctx.strokeStyle = C.line;
-  ctx.beginPath(); ctx.moveTo(16, y - 4); ctx.lineTo(width - 16, y - 4); ctx.stroke();
-
-  sLine('Quỹ ròng (sau trừ nước)', formatMoney(netPool), netPool >= 0 ? C.green : C.red, true);
-  sLine(`Tiền sân (${totals.days} ngày × ${formatMoney(courtFeePerDay)})`, '−' + formatMoney(courtTotal), C.red, false);
-
-  y += 4;
-  ctx.strokeStyle = C.line;
-  ctx.beginPath(); ctx.moveTo(16, y - 4); ctx.lineTo(width - 16, y - 4); ctx.stroke();
-
-  // Final balance box
-  ctx.fillStyle = balance >= 0 ? '#EAF3EC' : '#FBEEEE';
-  ctx.fillRect(16, y, width - 32, 50);
+  // Balance box
+  ctx.fillStyle = totals.net >= 0 ? '#EAF3EC' : '#FBEEEE';
+  ctx.fillRect(PAD, y, cardW, 48);
   ctx.font = '600 12px Inter, sans-serif';
   ctx.fillStyle = C.dark; ctx.textAlign = 'left';
-  ctx.fillText(balance >= 0 ? 'Quỹ còn dư' : 'CÒN THIẾU CHỦ SÂN', 28, y + 20);
+  ctx.fillText(totals.net >= 0 ? 'Quỹ còn dư' : 'Quỹ bị âm', PAD + 10, y + 18);
   ctx.font = '700 20px Oswald, sans-serif';
-  ctx.fillStyle = balance >= 0 ? C.green : C.red; ctx.textAlign = 'right';
-  ctx.fillText((balance < 0 ? '−' : '+') + formatMoney(Math.abs(balance)), width - 28, y + 34);
-  y += 64;
+  ctx.fillStyle = totals.net >= 0 ? C.green : C.red; ctx.textAlign = 'right';
+  ctx.fillText(`${totals.net >= 0 ? '+' : ''}${formatMoney(totals.net)}`, PAD + cardW - 10, y + 36);
+  y += 52;
 
-  ctx.strokeStyle = C.line;
-  ctx.beginPath(); ctx.moveTo(16, y); ctx.lineTo(width - 16, y); ctx.stroke();
-  y += 18;
-  ctx.textAlign = 'center';
+  // Footer
+  ctx.strokeStyle = C.line; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD, y + 8); ctx.lineTo(W - PAD, y + 8); ctx.stroke();
   ctx.font = '400 10px Inter, sans-serif';
-  ctx.fillStyle = C.muted;
-  const t = now;
-  ctx.fillText(`Xuất lúc ${pad(t.getHours())}:${pad(t.getMinutes())} ${pad(t.getDate())}/${pad(t.getMonth()+1)}/${t.getFullYear()}`, width / 2, y);
+  ctx.fillStyle = C.muted; ctx.textAlign = 'center';
+  const now = new Date();
+  ctx.fillText(`Xuất lúc ${pad(now.getHours())}:${pad(now.getMinutes())} ${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()}`, W / 2, y + 22);
 }
