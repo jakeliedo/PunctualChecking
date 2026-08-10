@@ -1731,6 +1731,7 @@ function drawReport(canvas, reportView) {
   const C = {
     dark: '#1C2321', muted: '#7C8580', green: '#2E8B57', red: '#C0392B',
     line: '#E4E1DA', headBg: '#F4F2EC', unpaidBg: '#FBEEEE', navy: '#1C2B3A', yellow: '#F2B705',
+    blue: '#2C6E9B',
   };
 
   ctx.fillStyle = '#FFFFFF';
@@ -1756,15 +1757,20 @@ function drawReport(canvas, reportView) {
 
   let y = 90;
   ctx.textAlign = 'left';
+  // Column x positions: STT=26, Tên=64, Trạng thái=262, CK=387(right), Tiền=right
+  const X = { stt: 26, ten: 64, status: 262, ck: 387, tien: width - 26 };
+
   ctx.fillStyle = C.headBg;
   ctx.fillRect(16, y, width - 32, rowH);
   ctx.fillStyle = C.dark;
   ctx.font = '600 12px Inter, sans-serif';
-  ctx.fillText('STT', 26, y + rowH / 2 + 4);
-  ctx.fillText('Tên', 64, y + rowH / 2 + 4);
-  ctx.fillText('Trạng thái', 300, y + rowH / 2 + 4);
+  ctx.textAlign = 'left';
+  ctx.fillText('STT', X.stt, y + rowH / 2 + 4);
+  ctx.fillText('Tên', X.ten, y + rowH / 2 + 4);
+  ctx.fillText('Trạng thái', X.status, y + rowH / 2 + 4);
   ctx.textAlign = 'right';
-  ctx.fillText('Tiền', width - 26, y + rowH / 2 + 4);
+  ctx.fillText('CK', X.ck, y + rowH / 2 + 4);
+  ctx.fillText('Tiền', X.tien, y + rowH / 2 + 4);
   ctx.textAlign = 'left';
   y += rowH;
 
@@ -1785,20 +1791,27 @@ function drawReport(canvas, reportView) {
     const color = isFullyCovered ? C.muted : (r.paid ? C.dark : C.red);
     ctx.fillStyle = C.muted;
     ctx.font = '400 12px Inter, sans-serif';
-    ctx.fillText(String(idx + 1), 26, y + rowH / 2 + 4);
+    ctx.fillText(String(idx + 1), X.stt, y + rowH / 2 + 4);
     ctx.fillStyle = color;
     ctx.font = '500 12px Inter, sans-serif';
-    const name = r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name;
-    ctx.fillText(name, 64, y + rowH / 2 + 4);
+    const name = r.name.length > 20 ? r.name.slice(0, 19) + '…' : r.name;
+    ctx.fillText(name, X.ten, y + rowH / 2 + 4);
     ctx.fillStyle = isFullyCovered ? C.muted : (r.paid ? C.green : C.red);
     ctx.font = '600 12px Inter, sans-serif';
     const statusLabel = isFullyCovered ? '↙ Được trả thay' : (r.paid ? '✓ Đã đóng' : '✗ Chưa đóng');
-    ctx.fillText(statusLabel, 290, y + rowH / 2 + 4);
+    ctx.fillText(statusLabel, X.status, y + rowH / 2 + 4);
+    // CK column: show 'CK' for transfer, blank for cash
+    if (r.paid && r.method === 'transfer') {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = C.blue;
+      ctx.font = '700 11px Inter, sans-serif';
+      ctx.fillText('CK', X.ck, y + rowH / 2 + 4);
+    }
     ctx.textAlign = 'right';
     ctx.fillStyle = color;
     ctx.font = '400 12px Inter, sans-serif';
     const amountLabel = isFullyCovered ? '0đ' : (r.paid ? formatMoney(r.amount) : '—');
-    ctx.fillText(amountLabel, width - 26, y + rowH / 2 + 4);
+    ctx.fillText(amountLabel, X.tien, y + rowH / 2 + 4);
     ctx.textAlign = 'left';
     y += rowH;
 
