@@ -1428,10 +1428,10 @@ function ReportModal({ reportView, canvasRef, imgUrl, onClose, onDownload }) {
       <canvas ref={canvasRef} style={{ display: 'none' }} />
 
       {/* Show as <img> so long-press "Lưu vào Ảnh" works on iOS */}
-      <div className="flex-1 overflow-auto flex justify-center p-4">
+      <div className="flex-1 overflow-y-auto p-4">
         {imgUrl
-          ? <img src={imgUrl} alt="Phiếu thu" style={{ width: '100%', maxWidth: 460, height: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', display: 'block' }} />
-          : <div className="flex items-center justify-center w-full" style={{ color: COLORS.muted, fontSize: 13 }}>Đang vẽ...</div>
+          ? <img src={imgUrl} alt="Phiếu thu" style={{ width: '100%', maxWidth: 460, height: 'auto', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', display: 'block', margin: '0 auto' }} />
+          : <div className="flex items-center justify-center w-full h-full" style={{ color: COLORS.muted, fontSize: 13 }}>Đang vẽ...</div>
         }
       </div>
 
@@ -1798,7 +1798,7 @@ function drawReport(canvas, reportView) {
     ctx.fillText(name, X.ten, y + rowH / 2 + 4);
     ctx.fillStyle = isFullyCovered ? C.muted : (r.paid ? C.green : C.red);
     ctx.font = '600 12px Inter, sans-serif';
-    const statusLabel = isFullyCovered ? '↙ Được trả thay' : (r.paid ? '✓ Đã đóng' : '✗ Chưa đóng');
+    const statusLabel = isFullyCovered ? '↙ Paid by' : (r.paid ? '✓ Paid' : '✗ Chưa đóng');
     ctx.fillText(statusLabel, X.status, y + rowH / 2 + 4);
     // CK column: show 'CK' for transfer, blank for cash
     if (r.paid && r.method === 'transfer') {
