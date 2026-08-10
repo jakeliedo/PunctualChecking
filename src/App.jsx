@@ -1758,7 +1758,7 @@ function drawReport(canvas, reportView) {
   let y = 90;
   ctx.textAlign = 'left';
   // Column x positions: STT=26, Tên=64, Trạng thái=262, CK=387(right), Tiền=right
-  const X = { stt: 26, ten: 64, status: 262, ck: 387, tien: width - 26 };
+  const X = { stt: 26, ten: 64, status: 262, ck: 395, tien: width - 26 };
 
   ctx.fillStyle = C.headBg;
   ctx.fillRect(16, y, width - 32, rowH);
@@ -1769,7 +1769,9 @@ function drawReport(canvas, reportView) {
   ctx.fillText('Tên', X.ten, y + rowH / 2 + 4);
   ctx.fillText('Trạng thái', X.status, y + rowH / 2 + 4);
   ctx.textAlign = 'right';
-  ctx.fillText('CK', X.ck, y + rowH / 2 + 4);
+  ctx.font = '600 10px Inter, sans-serif';
+  ctx.fillText('Hình thức', X.ck, y + rowH / 2 + 4);
+  ctx.font = '600 12px Inter, sans-serif';
   ctx.fillText('Tiền', X.tien, y + rowH / 2 + 4);
   ctx.textAlign = 'left';
   y += rowH;
