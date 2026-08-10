@@ -401,7 +401,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ background: COLORS.ivory, minHeight: '100%', fontFamily: "'Inter', sans-serif", color: COLORS.text }} className="flex flex-col">
+    <div style={{ background: COLORS.ivory, height: '100%', fontFamily: "'Inter', sans-serif", color: COLORS.text }} className="flex flex-col">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
         .score-num { font-family: 'Oswald', sans-serif; font-weight: 700; letter-spacing: 0.5px; }
