@@ -454,6 +454,7 @@ export default function App() {
           <TodayTab
             checkins={checkins}
             fee={fee}
+            waterFee={waterFee}
             isLocked={isLocked}
             onRemove={removeFromToday}
             onPaid={setPaid}
@@ -612,7 +613,7 @@ function TabButton({ icon, label, active, onClick }) {
   );
 }
 
-function TodayTab({ checkins, fee, isLocked, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor }) {
+function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor }) {
   const sorted = sortMembersFirst(checkins);
   if (checkins.length === 0) {
     return (
@@ -644,6 +645,42 @@ function TodayTab({ checkins, fee, isLocked, onRemove, onPaid, onAmount, onAddGu
           </button>
         </div>
       )}
+      {(() => {
+        const paid = checkins.filter(c => c.paid);
+        const cashTotal = paid.filter(c => c.method === 'cash').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+        const transferTotal = paid.filter(c => c.method === 'transfer').reduce((s, c) => s + (Number(c.amount) || 0), 0);
+        const cashToMomo = cashTotal - waterFee;
+        if (paid.length === 0) return null;
+        return (
+          <div className="mb-3 rounded-xl overflow-hidden" style={{ border: `1px solid ${COLORS.line}` }}>
+            <div className="px-3 py-1.5" style={{ background: COLORS.navy }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#8FA3B8', letterSpacing: 0.5 }}>CÂN ĐỐI QUỸ MOMO</span>
+            </div>
+            <div style={{ background: COLORS.card }}>
+              <div className="flex justify-between px-3 py-1.5" style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+                <span style={{ fontSize: 12, color: COLORS.muted }}>CK vào thẳng Momo</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.blue }}>+{formatMoney(transferTotal)}</span>
+              </div>
+              <div className="flex justify-between px-3 py-1.5" style={{ borderBottom: `1px solid ${COLORS.line}` }}>
+                <span style={{ fontSize: 12, color: COLORS.muted }}>Tiền mặt thu được</span>
+                <span style={{ fontSize: 12, color: COLORS.text }}>+{formatMoney(cashTotal)}</span>
+              </div>
+              {waterFee > 0 && (
+                <div className="flex justify-between px-3 py-1.5" style={{ borderBottom: `1px dashed ${COLORS.line}` }}>
+                  <span style={{ fontSize: 12, color: COLORS.muted }}>Trừ tiền nước (TM tại sân)</span>
+                  <span style={{ fontSize: 12, color: COLORS.brown }}>−{formatMoney(waterFee)}</span>
+                </div>
+              )}
+              <div className="flex justify-between px-3 py-2" style={{ background: cashToMomo > 0 ? '#FFF3E0' : cashToMomo === 0 ? COLORS.ivory : '#FBEEEE' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>TM cần nạp vào Momo</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: cashToMomo > 0 ? '#E65100' : cashToMomo === 0 ? COLORS.muted : COLORS.red }}>
+                  {cashToMomo > 0 ? '+' : ''}{formatMoney(cashToMomo)}
+                </span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <div className="flex flex-col gap-2">
         {sorted.map((c, idx) => {
           const isCovered = !!c.paidBy;
@@ -1661,6 +1698,10 @@ function SummaryRow({ label, value, color, bold, highlight }) {
 
 function drawReport(canvas, reportView) {
   const { dateStr, timeStr, rows, feeUsed, waterFeeUsed = 0, courtFeeUsed = 0 } = reportView;
+  const paidRows = rows.filter(r => r.paid);
+  const transferTotal = paidRows.filter(r => r.method === 'transfer').reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const cashTotal = paidRows.filter(r => r.method === 'cash').reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const cashToMomo = cashTotal - waterFeeUsed;
   const scale = 2;
   const width = 480;
   const rowH = 34;
@@ -1672,6 +1713,7 @@ function drawReport(canvas, reportView) {
     + (hasGuestRow ? 20 : 0)
     + (waterFeeUsed > 0 ? 28 : 0)
     + (showDeductions ? 28 : 0)
+    + (showDeductions ? 44 : 0)
     + (courtFeeUsed > 0 ? 28 : 0)
     + (showDeductions ? 56 : 0);
   const noteRowsH = rows.reduce((h, r) => {
@@ -1850,7 +1892,21 @@ function drawReport(canvas, reportView) {
     ctx.textAlign = 'right';
     ctx.fillStyle = momoAmount >= 0 ? C.blue : C.red;
     ctx.fillText((momoAmount < 0 ? '-' : '') + formatMoney(Math.abs(momoAmount)), width - 24, y);
-    y += 28;
+    y += 26;
+
+    // Sub-lines: CK breakdown + cash to top up
+    ctx.font = '400 11px Inter, sans-serif';
+    ctx.fillStyle = C.muted; ctx.textAlign = 'left';
+    ctx.fillText('  ↳ CK vào thẳng:', 24, y);
+    ctx.fillStyle = C.blue; ctx.textAlign = 'right';
+    ctx.fillText('+' + formatMoney(transferTotal), width - 24, y);
+    y += 20;
+
+    ctx.fillStyle = C.muted; ctx.textAlign = 'left';
+    ctx.fillText('  ↳ TM cần nạp Momo:', 24, y);
+    ctx.fillStyle = cashToMomo > 0 ? '#E65100' : C.muted; ctx.textAlign = 'right';
+    ctx.fillText((cashToMomo > 0 ? '+' : '') + formatMoney(cashToMomo), width - 24, y);
+    y += 24;
 
     if (courtFeeUsed > 0) {
       ctx.textAlign = 'left';
