@@ -1671,7 +1671,7 @@ function drawReport(canvas, reportView) {
   const footerH = 170
     + (hasGuestRow ? 20 : 0)
     + (waterFeeUsed > 0 ? 28 : 0)
-    + (waterFeeUsed > 0 ? 28 : 0)
+    + (showDeductions ? 28 : 0)
     + (courtFeeUsed > 0 ? 28 : 0)
     + (showDeductions ? 56 : 0);
   const noteRowsH = rows.reduce((h, r) => {
@@ -1840,17 +1840,17 @@ function drawReport(canvas, reportView) {
       ctx.fillStyle = '#B0651B';
       ctx.fillText('-' + formatMoney(waterFeeUsed), width - 24, y);
       y += 28;
-
-      const momoAmount = total - waterFeeUsed;
-      ctx.textAlign = 'left';
-      ctx.font = '600 13px Inter, sans-serif';
-      ctx.fillStyle = C.dark;
-      ctx.fillText('Thu về Quỹ Momo', 24, y);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = momoAmount >= 0 ? C.blue : C.red;
-      ctx.fillText((momoAmount < 0 ? '-' : '') + formatMoney(Math.abs(momoAmount)), width - 24, y);
-      y += 28;
     }
+
+    const momoAmount = total - waterFeeUsed;
+    ctx.textAlign = 'left';
+    ctx.font = '600 13px Inter, sans-serif';
+    ctx.fillStyle = C.dark;
+    ctx.fillText('Thu về Quỹ Momo', 24, y);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = momoAmount >= 0 ? C.blue : C.red;
+    ctx.fillText((momoAmount < 0 ? '-' : '') + formatMoney(Math.abs(momoAmount)), width - 24, y);
+    y += 28;
 
     if (courtFeeUsed > 0) {
       ctx.textAlign = 'left';
