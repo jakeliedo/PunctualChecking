@@ -73,6 +73,7 @@ export default function App() {
   const [showPayFor, setShowPayFor] = useState(null);
   const [isLocked, setIsLocked] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
+  const [dayNote, setDayNote] = useState('');
   const canvasRef = useRef(null);
   // Prevents persist effect from writing stale checkins during a date switch
   const dateLoadingRef = useRef(false);
@@ -90,6 +91,7 @@ export default function App() {
       setCourtFee(f?.courtFee ?? 375000);
       setCheckins(day?.checkins || []);
       setIsLocked(day?.locked || false);
+      setDayNote(day?.note || '');
       const keys = await listDayKeys();
       setHistoryKeys(keys);
       setLoading(false);
@@ -105,6 +107,7 @@ export default function App() {
     storageGet(`day:${activeDateKey}`).then(day => {
       setCheckins(day?.checkins || []);
       setIsLocked(day?.locked || false);
+      setDayNote(day?.note || '');
       dateLoadingRef.current = false;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,13 +120,13 @@ export default function App() {
     // Skip if: initial load not done, date switch in progress, or day is locked.
     // Lock state changes are saved separately via handleLockToggle to avoid this guard.
     if (loading || dateLoadingRef.current || isLocked) return;
-    storageSet(`day:${activeDateKey}`, { checkins, locked: false, waterFeeUsed: waterFee, courtFeeUsed: courtFee, savedAt: Date.now() });
+    storageSet(`day:${activeDateKey}`, { checkins, locked: false, waterFeeUsed: waterFee, courtFeeUsed: courtFee, note: dayNote, savedAt: Date.now() });
     setHistoryKeys(prev => {
       const key = `day:${activeDateKey}`;
       if (prev.includes(key)) return prev;
       return [key, ...prev].sort().reverse();
     });
-  }, [checkins, loading, activeDateKey, waterFee]); // isLocked intentionally excluded — lock saves go through handleLockToggle
+  }, [checkins, loading, activeDateKey, waterFee, dayNote]); // isLocked intentionally excluded — lock saves go through handleLockToggle
 
   // ---------- Derived ----------
   const attendanceRate = (m) => {
@@ -326,6 +329,19 @@ export default function App() {
       locked: newLocked,
       waterFeeUsed: waterFee,
       courtFeeUsed: courtFee,
+      note: dayNote,
+      savedAt: Date.now(),
+    });
+  };
+
+  const handleSaveNote = (note) => {
+    setDayNote(note);
+    storageSet(`day:${activeDateKey}`, {
+      checkins,
+      locked: isLocked,
+      waterFeeUsed: waterFee,
+      courtFeeUsed: courtFee,
+      note,
       savedAt: Date.now(),
     });
   };
@@ -462,6 +478,8 @@ export default function App() {
             onAddGuest={() => setShowAddGuest(true)}
             onAddFromRoster={() => setTab('roster')}
             onPayFor={(id) => setShowPayFor(id)}
+            dayNote={dayNote}
+            onSaveNote={handleSaveNote}
           />
         )}
         {tab === 'roster' && (
@@ -613,8 +631,10 @@ function TabButton({ icon, label, active, onClick }) {
   );
 }
 
-function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor }) {
+function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor, dayNote = '', onSaveNote }) {
   const sorted = sortMembersFirst(checkins);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteText, setNoteText] = useState('');
   if (checkins.length === 0) {
     return (
       <div className="flex flex-col items-center text-center px-8 pt-16 gap-3">
@@ -681,6 +701,41 @@ function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onA
           </div>
         );
       })()}
+      {/* Note button */}
+      <button
+        onClick={() => { setNoteText(dayNote); setShowNoteModal(true); }}
+        className="mb-3 w-full flex items-center justify-between px-3 py-2.5 rounded-xl"
+        style={{ background: COLORS.card, border: `1px solid ${COLORS.line}`, textAlign: 'left' }}
+      >
+        <span style={{ fontSize: 12, color: COLORS.muted, fontWeight: 500, flexShrink: 0 }}>📝 Ghi chú</span>
+        <span style={{ fontSize: 12, color: dayNote ? COLORS.text : COLORS.muted, marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {dayNote || 'Chưa có ghi chú'}
+        </span>
+      </button>
+      {showNoteModal && (
+        <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setShowNoteModal(false)}>
+          <div onClick={e => e.stopPropagation()} className="w-full rounded-t-2xl" style={{ background: COLORS.card, maxWidth: 480, padding: '20px 16px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, color: COLORS.text }}>Ghi chú ngày</div>
+            <textarea
+              autoFocus
+              rows={5}
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              placeholder="Nhập ghi chú cho buổi này..."
+              className="w-full rounded-xl"
+              style={{ fontSize: 14, border: `1px solid ${COLORS.line}`, padding: '10px 12px', resize: 'none', background: COLORS.ivory, color: COLORS.text, outline: 'none' }}
+            />
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => setShowNoteModal(false)} className="flex-1 rounded-xl py-2.5" style={{ border: `1px solid ${COLORS.line}`, background: COLORS.ivory, fontSize: 14, color: COLORS.text }}>
+                Huỷ
+              </button>
+              <button onClick={() => { onSaveNote(noteText); setShowNoteModal(false); }} className="flex-1 rounded-xl py-2.5" style={{ background: COLORS.navy, color: 'white', fontSize: 14, fontWeight: 600 }}>
+                Lưu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         {sorted.map((c, idx) => {
           const isCovered = !!c.paidBy;
