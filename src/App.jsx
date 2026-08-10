@@ -1709,7 +1709,7 @@ function drawReport(canvas, reportView) {
   const headerH = 150;
   const hasGuestRow = rows.some(r => r.isGuest);
   const showDeductions = waterFeeUsed > 0 || courtFeeUsed > 0;
-  const footerH = 170
+  const footerH = 142
     + (hasGuestRow ? 20 : 0)
     + (waterFeeUsed > 0 ? 28 : 0)
     + (showDeductions ? 28 : 0)
@@ -1747,13 +1747,21 @@ function drawReport(canvas, reportView) {
     ctx.fill();
   }
 
+  const [dd, mm, yyyy] = dateStr.split('/');
+  const DOW = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
+  const dayName = DOW[new Date(parseInt(yyyy), parseInt(mm) - 1, parseInt(dd)).getDay()];
+  const fullDateStr = `${dayName}, ${dateStr}`;
+
   ctx.fillStyle = '#FFFFFF';
   ctx.font = '700 20px Oswald, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('PHIẾU THU SÂN BÓNG CHUYỀN', width / 2, 30);
-  ctx.font = '400 13px Inter, sans-serif';
+  ctx.font = '400 12px Inter, sans-serif';
   ctx.fillStyle = '#B9C6D1';
-  ctx.fillText(`Ngày ${dateStr}`, width / 2, 50);
+  ctx.textAlign = 'left';
+  ctx.fillText(fullDateStr, 24, 50);
+  ctx.textAlign = 'right';
+  ctx.fillText(`Số người: ${rows.length}`, width - 24, 50);
 
   let y = 90;
   ctx.textAlign = 'left';
@@ -1859,7 +1867,6 @@ function drawReport(canvas, reportView) {
     ctx.fillText(value, width - 24, y);
     y += 24;
   };
-  summaryLine('Tổng số người tham gia:', `${rows.length} người`, C.dark);
   summaryLine('Đã đóng:', `${paidCount} người`, C.green);
   summaryLine('Chưa đóng:', `${unpaidCount} người`, C.red);
 
@@ -1877,12 +1884,13 @@ function drawReport(canvas, reportView) {
   ctx.fillText(formatMoney(total), width - 24, y);
   y += 28;
   ctx.textAlign = 'left';
+  ctx.font = '600 13px Inter, sans-serif';
   ctx.fillStyle = C.dark;
-  ctx.fillText('CÒN NỢ (dự kiến)', 24, y);
+  ctx.fillText('Chưa đóng:', 24, y);
   ctx.textAlign = 'right';
   ctx.fillStyle = C.red;
   ctx.fillText(formatMoney(owed), width - 24, y);
-  y += 32;
+  y += 28;
 
   if (showDeductions) {
     ctx.strokeStyle = C.line;
