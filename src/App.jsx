@@ -825,8 +825,8 @@ function PayForModal({ target, allCheckins, fee, onSetPayFor, onClose }) {
   const isCovered = !!target.paidBy;
   const paidForNames = target.paidForNames || [];
 
-  // Eligible payers: not already covered, not the target itself
-  const eligible = allCheckins.filter(c => c.id !== target.id && !c.paidBy);
+  // Eligible payers: anyone except the target itself
+  const eligible = allCheckins.filter(c => c.id !== target.id);
 
   const handleSelect = (payerName) => { onSetPayFor(target.id, payerName); onClose(); };
   const handleRemoveCoverage = () => { onSetPayFor(target.id, null); onClose(); };
@@ -890,6 +890,11 @@ function PayForModal({ target, allCheckins, fee, onSetPayFor, onClose }) {
               className="w-full text-left py-3 px-3 rounded-xl mb-1.5 text-sm font-medium"
               style={{ background: COLORS.ivory, color: COLORS.text }}>
               {c.name}
+              {c.paidBy && (
+                <span style={{ color: COLORS.muted, fontSize: 11, marginLeft: 6 }}>
+                  (được {c.paidBy} trả thay)
+                </span>
+              )}
               {(c.paidForNames || []).length > 0 && (
                 <span style={{ color: COLORS.blue, fontSize: 11, marginLeft: 6 }}>
                   (đang trả cho {c.paidForNames.length} người)
