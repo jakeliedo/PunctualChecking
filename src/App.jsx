@@ -129,14 +129,9 @@ export default function App() {
   }, [checkins, loading, activeDateKey, waterFee, dayNote]); // isLocked intentionally excluded — lock saves go through handleLockToggle
 
   // ---------- Derived ----------
-  const attendanceRate = (m) => {
-    const daysTracked = Math.max(1, Math.ceil((Date.now() - (m.joinedAt || Date.now())) / 86400000));
-    return (m.playCount || 0) / daysTracked;
-  };
-
   const filteredRoster = members
     .filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => attendanceRate(b) - attendanceRate(a) || a.name.localeCompare(b.name));
+    .sort((a, b) => (b.playCount || 0) - (a.playCount || 0) || a.name.localeCompare(b.name));
 
   const totalPeople = checkins.length;
   const paidList = checkins.filter(c => c.paid);
