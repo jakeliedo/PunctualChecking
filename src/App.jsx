@@ -1505,6 +1505,7 @@ function ReportModal({ reportView, canvasRef, imgUrl, onClose, onDownload }) {
 function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
   const [selected, setSelected] = useState(new Set());
   const [dayData, setDayData] = useState({});
+  const [sortBy, setSortBy] = useState('sessions');
   const settlementCanvasRef = useRef(null);
 
   useEffect(() => {
@@ -1548,6 +1549,34 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
     people: acc.people + d.count,
     unpaid: acc.unpaid + d.unpaid,
   }), { collected: 0, water: 0, court: 0, net: 0, people: 0, unpaid: 0 });
+
+  const totalDaysTracked = Object.keys(dayData).length;
+
+  const memberStats = (() => {
+    const map = {};
+    Object.values(dayData).forEach(day => {
+      (day.checkins || []).forEach(c => {
+        if (c.isGuest) return;
+        const n = c.name;
+        if (!map[n]) map[n] = { name: n, sessions: 0, totalPaid: 0, coveredOthers: 0, wasCovered: 0 };
+        map[n].sessions++;
+        if (c.paid) map[n].totalPaid += Number(c.amount) || 0;
+        if ((c.paidForNames || []).length > 0) map[n].coveredOthers += (c.paidForNames || []).length;
+        if (c.paidBy) map[n].wasCovered++;
+      });
+    });
+    return Object.values(map)
+      .map(m => ({
+        ...m,
+        avg: m.sessions > 0 ? Math.round(m.totalPaid / m.sessions) : 0,
+        rate: totalDaysTracked > 0 ? Math.round(m.sessions / totalDaysTracked * 100) : 0,
+      }))
+      .sort((a, b) => {
+        if (sortBy === 'paid') return b.totalPaid - a.totalPaid || b.sessions - a.sessions;
+        if (sortBy === 'avg') return b.avg - a.avg || b.sessions - a.sessions;
+        return b.sessions - a.sessions || b.totalPaid - a.totalPaid;
+      });
+  })();
 
   const exportSettlementImage = () => {
     if (!settlementCanvasRef.current || selectedDays.length === 0) return;
@@ -1733,6 +1762,66 @@ function SettlementTab({ historyKeys, defaultCourtFee = 375000 }) {
             </button>
           </div>
         </>
+      )}
+
+      {/* Member analytics section — all historical days */}
+      {totalDaysTracked > 0 && memberStats.length > 0 && (
+        <div className="mt-5">
+          <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center gap-2">
+              <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: '0.06em', color: COLORS.muted }}>PHÂN TÍCH THÀNH VIÊN</span>
+              <span style={{ fontSize: 11, color: COLORS.muted, background: COLORS.line, borderRadius: 99, padding: '1px 8px' }}>
+                {totalDaysTracked} ngày
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-1.5 mb-3">
+            {[['sessions', 'Số buổi'], ['paid', 'Tổng đóng'], ['avg', 'TB/buổi']].map(([key, label]) => (
+              <button key={key} onClick={() => setSortBy(key)}
+                className="px-3 py-1 rounded-full"
+                style={{
+                  fontSize: 12, fontWeight: 600,
+                  background: sortBy === key ? COLORS.navy : COLORS.card,
+                  color: sortBy === key ? 'white' : COLORS.text,
+                  border: `1px solid ${sortBy === key ? COLORS.navy : COLORS.line}`,
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {memberStats.map((m, i) => (
+              <div key={m.name} className="px-3 py-2.5 rounded-xl" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span style={{ fontSize: 11, color: COLORS.muted, minWidth: 20 }}>{i + 1}.</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{m.name}</span>
+                    {m.coveredOthers > 0 && (
+                      <span style={{ fontSize: 10, color: COLORS.green, background: '#EAF3EC', borderRadius: 99, padding: '1px 5px' }}>
+                        trả thay ×{m.coveredOthers}
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.green }}>{formatMoney(m.totalPaid)}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div style={{ flex: 1, height: 4, background: COLORS.line, borderRadius: 2 }}>
+                    <div style={{ width: `${m.rate}%`, height: 4, background: COLORS.blue, borderRadius: 2 }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: COLORS.muted, whiteSpace: 'nowrap' }}>
+                    {m.sessions}/{totalDaysTracked} buổi ({m.rate}%)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span style={{ fontSize: 11, color: COLORS.muted }}>TB: {formatMoney(m.avg)}/buổi</span>
+                  {m.wasCovered > 0 && (
+                    <span style={{ fontSize: 10, color: COLORS.muted }}>được trả thay {m.wasCovered} lần</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <canvas ref={settlementCanvasRef} style={{ display: 'none' }} />
