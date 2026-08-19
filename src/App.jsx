@@ -235,17 +235,29 @@ export default function App() {
     setShowAddGuest(false);
   };
 
+  // Normalize amounts for all paid checkins based on current paidBy/paidForNames.
+  // Preserves custom amounts only for simple self-payers (no coverage in either direction).
+  const recalcPaidAmounts = (checkins) =>
+    checkins.map(c => {
+      if (!c.paid) return c;
+      const oc = c.paidBy ? 0 : 1;
+      const obs = (c.paidForNames || []).length;
+      if (oc === 1 && obs === 0 && c.amount > 0 && c.amount !== fee) return c; // preserve custom
+      return { ...c, amount: fee * (oc + obs) };
+    });
+
   const removeFromToday = (id) => {
     if (isLocked) return;
     setCheckins(prev => {
       const target = prev.find(c => c.id === id);
       if (!target) return prev.filter(c => c.id !== id);
-      return prev.filter(c => c.id !== id).map(c => {
+      const cleaned = prev.filter(c => c.id !== id).map(c => {
         if (c.paidBy === target.name) return { ...c, paidBy: null };
         if ((c.paidForNames || []).includes(target.name))
           return { ...c, paidForNames: c.paidForNames.filter(n => n !== target.name) };
         return c;
       });
+      return recalcPaidAmounts(cleaned);
     });
   };
 
@@ -269,43 +281,34 @@ export default function App() {
       const target = prev.find(c => c.id === targetId);
       if (!target) return prev;
       const oldPayerName = target.paidBy;
+      const targetHasObligations = (target.paidForNames || []).length > 0;
 
-      // Step 1: strip old payer's list + clear target's paidBy
+      // Step 1: remove old payer relationship + reset target
       let updated = prev.map(c => {
         if (oldPayerName && c.name === oldPayerName)
           return { ...c, paidForNames: (c.paidForNames || []).filter(n => n !== target.name) };
-        if (c.id === targetId) return { ...c, paidBy: null, paid: false, amount: 0 };
+        if (c.id === targetId) {
+          // If assigning a new payer AND target still has obligations (pays for others),
+          // keep their paid status — their amount will be recalculated by recalcPaidAmounts.
+          // Otherwise reset to unpaid so they can re-submit their own payment.
+          if (payerName && targetHasObligations)
+            return { ...c, paidBy: null };
+          return { ...c, paidBy: null, paid: false, amount: 0 };
+        }
         return c;
       });
 
-      // Step 2: recalc old payer's amount (if already paid)
-      if (oldPayerName) {
-        updated = updated.map(c => {
-          if (c.name === oldPayerName && c.paid) {
-            const oc = c.paidBy ? 0 : 1;
-            return { ...c, amount: fee * (oc + (c.paidForNames || []).length) };
-          }
-          return c;
-        });
-      }
+      if (!payerName) return recalcPaidAmounts(updated);
 
-      if (!payerName) return updated;
-
-      // Step 3: assign new payer
+      // Step 2: assign new payer
       updated = updated.map(c => {
         if (c.id === targetId) return { ...c, paidBy: payerName };
         if (c.name === payerName) return { ...c, paidForNames: [...(c.paidForNames || []), target.name] };
         return c;
       });
 
-      // Step 4: recalc new payer's amount (if already paid)
-      return updated.map(c => {
-        if (c.name === payerName && c.paid) {
-          const oc = c.paidBy ? 0 : 1;
-          return { ...c, amount: fee * (oc + (c.paidForNames || []).length) };
-        }
-        return c;
-      });
+      // Normalize all paid amounts to reflect the updated relationships
+      return recalcPaidAmounts(updated);
     });
   };
 
