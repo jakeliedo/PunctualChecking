@@ -630,7 +630,13 @@ function TabButton({ icon, label, active, onClick }) {
 }
 
 function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor, dayNote = '', onSaveNote }) {
-  const sorted = sortMembersFirst(checkins);
+  const isDone = c => c.paid || (c.paidBy && (c.paidForNames || []).length === 0);
+  const sorted = [...checkins].sort((a, b) => {
+    if (a.isGuest !== b.isGuest) return a.isGuest ? 1 : -1;
+    const aDone = isDone(a), bDone = isDone(b);
+    if (aDone !== bDone) return aDone ? 1 : -1;
+    return 0;
+  });
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState('');
   if (checkins.length === 0) {
