@@ -725,7 +725,7 @@ function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onA
                 className="w-full rounded-xl"
                 style={{ fontSize: 14, border: `1px solid ${COLORS.line}`, padding: '10px 12px', paddingRight: noteText ? 36 : 12, resize: 'none', background: COLORS.ivory, color: COLORS.text, outline: 'none' }}
               />
-              {noteText && <button type="button" onClick={() => setNoteText('')} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+              {noteText && <button type="button" onPointerDown={e => { e.preventDefault(); setNoteText(''); }} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
             </div>
             <div className="flex gap-2 mt-3">
               <button onClick={() => setShowNoteModal(false)} className="flex-1 rounded-xl py-2.5" style={{ border: `1px solid ${COLORS.line}`, background: COLORS.ivory, fontSize: 14, color: COLORS.text }}>
@@ -811,7 +811,7 @@ function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onA
                         style={{ width: 52, border: `1px solid ${COLORS.line}`, color: COLORS.green }}
                       />
                       <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>K</span>
-                      <button onClick={() => onAmount(c.id, '')} className="p-0.5">
+                      <button onPointerDown={e => { e.preventDefault(); onAmount(c.id, ''); }} className="p-0.5">
                         <X size={12} style={{ color: COLORS.muted }} />
                       </button>
                     </div>
@@ -950,7 +950,7 @@ function RosterTab({ roster, totalCount, search, setSearch, isCheckedIn, onToggl
         <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg flex-1 min-w-0" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
           <Search size={14} style={{ color: COLORS.muted, flexShrink: 0 }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm tên..." className="flex-1 outline-none text-sm bg-transparent min-w-0" />
-          {search && <button onClick={() => setSearch('')} className="p-0.5 flex-shrink-0"><X size={13} style={{ color: COLORS.muted }} /></button>}
+          {search && <button onPointerDown={e => { e.preventDefault(); setSearch(''); }} className="p-0.5 flex-shrink-0"><X size={13} style={{ color: COLORS.muted }} /></button>}
         </div>
         <button onClick={onImport} className="p-2.5 rounded-lg" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
           <ListPlus size={18} style={{ color: COLORS.text }} />
@@ -1082,7 +1082,7 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
               className="w-full px-3 py-2.5 rounded-lg outline-none resize-none"
               style={{ ...inputStyle, paddingRight: value ? 36 : undefined }}
             />
-            {value && <button type="button" onClick={() => setValue('')} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+            {value && <button type="button" onPointerDown={e => { e.preventDefault(); setValue(''); }} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
           </div>
         ) : (
           <div className="relative mb-1">
@@ -1095,7 +1095,7 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
               className="w-full px-3 py-2.5 rounded-lg outline-none"
               style={{ ...inputStyle, paddingRight: value ? 36 : undefined }}
             />
-            {value && <button type="button" onClick={() => setValue('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+            {value && <button type="button" onPointerDown={e => { e.preventDefault(); setValue(''); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
           </div>
         )}
         {error && <div style={{ color: COLORS.red, fontSize: 12, marginBottom: 8 }}>{error}</div>}
@@ -1406,7 +1406,7 @@ function ImportModal({ value, setValue, onCancel, onConfirm }) {
             className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
             style={{ border: `1px solid ${COLORS.line}`, resize: 'none', fontFamily: 'monospace', paddingRight: value ? 36 : undefined }}
           />
-          {value && <button type="button" onClick={() => setValue('')} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+          {value && <button type="button" onPointerDown={e => { e.preventDefault(); setValue(''); }} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
         </div>
 
         <div className="rounded-lg p-3 mb-3" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>
@@ -1471,7 +1471,7 @@ function EditMemberModal({ member, onCancel, onSave, onDelete }) {
             className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
             style={{ border: `1px solid ${COLORS.line}`, paddingRight: name ? 36 : undefined }}
           />
-          {name && <button type="button" onClick={() => setName('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+          {name && <button type="button" onPointerDown={e => { e.preventDefault(); setName(''); }} className="absolute right-2 top-1/2 -translate-y-1/2 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
         </div>
         <div className="flex gap-2 mb-2">
           <button onClick={onCancel} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>Huỷ</button>
