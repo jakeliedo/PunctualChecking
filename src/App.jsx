@@ -28,7 +28,8 @@ function pad(n) { return n.toString().padStart(2, '0'); }
 function dateKeyOf(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 function formatVNDate(d) { return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; }
 function formatVNTime(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
-function formatMoney(n) { return (Number(n) || 0).toLocaleString('vi-VN') + 'đ'; }
+function formatMoney(n) { const k = (Number(n) || 0) / 1000; return (k % 1 === 0 ? String(k) : k.toFixed(1)) + 'K'; }
+function stripAccents(s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[đĐ]/g, m => m === 'đ' ? 'd' : 'D'); }
 function dateKeyToVN(key) { const [y, mo, da] = key.split('-'); return `${da}/${mo}/${y}`; }
 function newId(prefix) { return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`; }
 function sortMembersFirst(list) {
@@ -130,7 +131,7 @@ export default function App() {
 
   // ---------- Derived ----------
   const filteredRoster = members
-    .filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
+    .filter(m => stripAccents(m.name.toLowerCase()).includes(stripAccents(search.toLowerCase())))
     .sort((a, b) => (b.playCount || 0) - (a.playCount || 0) || a.name.localeCompare(b.name));
 
   const totalPeople = checkins.length;
@@ -314,7 +315,7 @@ export default function App() {
 
   const setAmount = (id, value) => {
     if (isLocked) return;
-    const n = Number(value.replace(/[^\d]/g, '')) || 0;
+    const n = Math.round((parseFloat(value.replace(/[^\d.]/g, '')) || 0) * 1000);
     setCheckins(prev => prev.map(c => c.id === id ? { ...c, amount: n } : c));
   };
 
@@ -630,13 +631,7 @@ function TabButton({ icon, label, active, onClick }) {
 }
 
 function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onAmount, onAddGuest, onAddFromRoster, onPayFor, dayNote = '', onSaveNote }) {
-  const isDone = c => c.paid || (c.paidBy && (c.paidForNames || []).length === 0);
-  const sorted = [...checkins].sort((a, b) => {
-    if (a.isGuest !== b.isGuest) return a.isGuest ? 1 : -1;
-    const aDone = isDone(a), bDone = isDone(b);
-    if (aDone !== bDone) return aDone ? 1 : -1;
-    return 0;
-  });
+  const sorted = checkins;
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState('');
   if (checkins.length === 0) {
@@ -720,15 +715,18 @@ function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onA
         <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setShowNoteModal(false)}>
           <div onClick={e => e.stopPropagation()} className="w-full rounded-t-2xl" style={{ background: COLORS.card, maxWidth: 480, padding: '20px 16px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
             <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12, color: COLORS.text }}>Ghi chú ngày</div>
-            <textarea
-              autoFocus
-              rows={5}
-              value={noteText}
-              onChange={e => setNoteText(e.target.value)}
-              placeholder="Nhập ghi chú cho buổi này..."
-              className="w-full rounded-xl"
-              style={{ fontSize: 14, border: `1px solid ${COLORS.line}`, padding: '10px 12px', resize: 'none', background: COLORS.ivory, color: COLORS.text, outline: 'none' }}
-            />
+            <div className="relative">
+              <textarea
+                autoFocus
+                rows={5}
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                placeholder="Nhập ghi chú cho buổi này..."
+                className="w-full rounded-xl"
+                style={{ fontSize: 14, border: `1px solid ${COLORS.line}`, padding: '10px 12px', paddingRight: noteText ? 36 : 12, resize: 'none', background: COLORS.ivory, color: COLORS.text, outline: 'none' }}
+              />
+              {noteText && <button type="button" onClick={() => setNoteText('')} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+            </div>
             <div className="flex gap-2 mt-3">
               <button onClick={() => setShowNoteModal(false)} className="flex-1 rounded-xl py-2.5" style={{ border: `1px solid ${COLORS.line}`, background: COLORS.ivory, fontSize: 14, color: COLORS.text }}>
                 Huỷ
@@ -803,13 +801,20 @@ function TodayTab({ checkins, fee, waterFee = 0, isLocked, onRemove, onPaid, onA
                     <ArrowLeftRight size={15} />
                   </button>
                   {c.paid ? (
-                    <input
-                      value={c.amount}
-                      onChange={e => onAmount(c.id, e.target.value)}
-                      inputMode="numeric"
-                      className="ml-auto text-right rounded-lg px-2 py-1 text-sm font-semibold"
-                      style={{ width: 84, border: `1px solid ${COLORS.line}`, color: COLORS.green }}
-                    />
+                    <div className="ml-auto flex items-center gap-0.5">
+                      <input
+                        value={c.amount > 0 ? String(c.amount / 1000) : ''}
+                        onChange={e => onAmount(c.id, e.target.value)}
+                        inputMode="decimal"
+                        placeholder={String(Math.round(fee / 1000))}
+                        className="text-right rounded-lg px-2 py-1 text-sm font-semibold"
+                        style={{ width: 52, border: `1px solid ${COLORS.line}`, color: COLORS.green }}
+                      />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.muted }}>K</span>
+                      <button onClick={() => onAmount(c.id, '')} className="p-0.5">
+                        <X size={12} style={{ color: COLORS.muted }} />
+                      </button>
+                    </div>
                   ) : (
                     <span className="ml-auto text-sm font-semibold" style={{ color: COLORS.red }}>Chưa đóng</span>
                   )}
@@ -945,6 +950,7 @@ function RosterTab({ roster, totalCount, search, setSearch, isCheckedIn, onToggl
         <div className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg flex-1 min-w-0" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
           <Search size={14} style={{ color: COLORS.muted, flexShrink: 0 }} />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Tìm tên..." className="flex-1 outline-none text-sm bg-transparent min-w-0" />
+          {search && <button onClick={() => setSearch('')} className="p-0.5 flex-shrink-0"><X size={13} style={{ color: COLORS.muted }} /></button>}
         </div>
         <button onClick={onImport} className="p-2.5 rounded-lg" style={{ background: COLORS.card, border: `1px solid ${COLORS.line}` }}>
           <ListPlus size={18} style={{ color: COLORS.text }} />
@@ -1066,25 +1072,31 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
         <div style={{ fontWeight: 700, fontSize: 16, marginBottom: hint ? 4 : 12 }}>{title}</div>
         {hint && <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>{hint}</div>}
         {multiline ? (
-          <textarea
-            autoFocus
-            rows={4}
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            placeholder={placeholder}
-            className="w-full px-3 py-2.5 rounded-lg mb-1 outline-none resize-none"
-            style={inputStyle}
-          />
+          <div className="relative mb-1">
+            <textarea
+              autoFocus
+              rows={4}
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              placeholder={placeholder}
+              className="w-full px-3 py-2.5 rounded-lg outline-none resize-none"
+              style={{ ...inputStyle, paddingRight: value ? 36 : undefined }}
+            />
+            {value && <button type="button" onClick={() => setValue('')} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+          </div>
         ) : (
-          <input
-            autoFocus
-            value={value}
-            onChange={e => setValue(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') onConfirm(); }}
-            placeholder={placeholder}
-            className="w-full px-3 py-2.5 rounded-lg mb-1 outline-none"
-            style={inputStyle}
-          />
+          <div className="relative mb-1">
+            <input
+              autoFocus
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onConfirm(); }}
+              placeholder={placeholder}
+              className="w-full px-3 py-2.5 rounded-lg outline-none"
+              style={{ ...inputStyle, paddingRight: value ? 36 : undefined }}
+            />
+            {value && <button type="button" onClick={() => setValue('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+          </div>
         )}
         {error && <div style={{ color: COLORS.red, fontSize: 12, marginBottom: 8 }}>{error}</div>}
         {!error && <div style={{ marginBottom: 10 }} />}
@@ -1098,9 +1110,9 @@ function NameModal({ title, placeholder, value, setValue, onCancel, onConfirm, c
 }
 
 function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtFee, activeDateKey, todayKey, onSwitchDate, onClose, onRestore }) {
-  const [val, setVal] = useState(String(fee));
-  const [waterVal, setWaterVal] = useState(String(waterFee));
-  const [courtVal, setCourtVal] = useState(String(courtFee));
+  const [val, setVal] = useState(String(fee / 1000));
+  const [waterVal, setWaterVal] = useState(String(waterFee / 1000));
+  const [courtVal, setCourtVal] = useState(String(courtFee / 1000));
   const [restoreMsg, setRestoreMsg] = useState('');
   const [dateVal, setDateVal] = useState('');
   const [copied, setCopied] = useState(false);
@@ -1182,21 +1194,24 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
             ].map(({ label, val: v, setVal: sv }) => (
               <div key={label}>
                 <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600, marginBottom: 4 }}>{label}</div>
-                <input
-                  inputMode="numeric"
-                  value={v}
-                  onChange={e => sv(e.target.value.replace(/[^\d]/g, ''))}
-                  className="w-full px-2 py-2 rounded-lg text-sm outline-none text-center"
-                  style={{ border: `1px solid ${COLORS.line}` }}
-                />
+                <div className="flex items-center gap-1">
+                  <input
+                    inputMode="decimal"
+                    value={v}
+                    onChange={e => sv(e.target.value.replace(/[^\d.]/g, ''))}
+                    className="flex-1 px-2 py-2 rounded-lg text-sm outline-none text-right"
+                    style={{ border: `1px solid ${COLORS.line}` }}
+                  />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted }}>K</span>
+                </div>
               </div>
             ))}
           </div>
           <button
             onClick={() => {
-              setFee(Number(val) || DEFAULT_FEE);
-              setWaterFee(Number(waterVal) || 0);
-              setCourtFee(Number(courtVal) || 0);
+              setFee(Math.round((parseFloat(val) || 0) * 1000) || DEFAULT_FEE);
+              setWaterFee(Math.round((parseFloat(waterVal) || 0) * 1000));
+              setCourtFee(Math.round((parseFloat(courtVal) || 0) * 1000));
               onClose();
             }}
             className="w-full py-2 rounded-xl text-sm font-semibold"
@@ -1381,15 +1396,18 @@ function ImportModal({ value, setValue, onCancel, onConfirm }) {
         <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 10 }}>
           Dán mỗi tên một dòng. Có thể giữ số thứ tự kiểu "8/ Hưng Đài" — app sẽ tự bỏ số, tên trùng sẽ bị lọc.
         </div>
-        <textarea
-          autoFocus
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          placeholder={'8/ Hưng Đài\n9/ A.Long\n10/ Chú Huy\n...'}
-          rows={8}
-          className="w-full px-3 py-2.5 rounded-lg text-sm mb-2 outline-none"
-          style={{ border: `1px solid ${COLORS.line}`, resize: 'none', fontFamily: 'monospace' }}
-        />
+        <div className="relative mb-2">
+          <textarea
+            autoFocus
+            value={value}
+            onChange={e => setValue(e.target.value)}
+            placeholder={'8/ Hưng Đài\n9/ A.Long\n10/ Chú Huy\n...'}
+            rows={8}
+            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
+            style={{ border: `1px solid ${COLORS.line}`, resize: 'none', fontFamily: 'monospace', paddingRight: value ? 36 : undefined }}
+          />
+          {value && <button type="button" onClick={() => setValue('')} className="absolute right-2 top-2.5 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+        </div>
 
         <div className="rounded-lg p-3 mb-3" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>
           <label className="flex items-center gap-2" style={{ fontSize: 13 }}>
@@ -1445,13 +1463,16 @@ function EditMemberModal({ member, onCancel, onSave, onDelete }) {
     <div className="fixed inset-0 flex items-end justify-center z-50" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={onCancel}>
       <div onClick={e => e.stopPropagation()} className="w-full rounded-t-2xl p-5" style={{ background: COLORS.card, maxWidth: 480 }}>
         <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>Sửa thành viên</div>
-        <input
-          autoFocus
-          value={name}
-          onChange={e => setName(e.target.value)}
-          className="w-full px-3 py-2.5 rounded-lg text-sm mb-3 outline-none"
-          style={{ border: `1px solid ${COLORS.line}` }}
-        />
+        <div className="relative mb-3">
+          <input
+            autoFocus
+            value={name}
+            onChange={e => setName(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
+            style={{ border: `1px solid ${COLORS.line}`, paddingRight: name ? 36 : undefined }}
+          />
+          {name && <button type="button" onClick={() => setName('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1"><X size={14} style={{ color: COLORS.muted }} /></button>}
+        </div>
         <div className="flex gap-2 mb-2">
           <button onClick={onCancel} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.ivory, border: `1px solid ${COLORS.line}` }}>Huỷ</button>
           <button onClick={() => onSave(member.id, name.trim() || member.name)} className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: COLORS.blue, color: 'white' }}>Lưu</button>
