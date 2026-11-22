@@ -54,6 +54,9 @@ export default function App() {
   const [fee, setFee] = useState(DEFAULT_FEE);
   const [waterFee, setWaterFee] = useState(15000);
   const [courtFee, setCourtFee] = useState(375000);
+  // Fees saved with the currently viewed day (may differ from global settings)
+  const [activeDayWaterFee, setActiveDayWaterFee] = useState(15000);
+  const [activeDayCourtFee, setActiveDayCourtFee] = useState(375000);
   const [today] = useState(new Date());
   const todayKey = dateKeyOf(today);
   const [activeDateKey, setActiveDateKey] = useState(todayKey);
@@ -93,6 +96,8 @@ export default function App() {
       setCheckins(day?.checkins || []);
       setIsLocked(day?.locked || false);
       setDayNote(day?.note || '');
+      setActiveDayWaterFee(day?.waterFeeUsed ?? (f?.waterFee ?? 15000));
+      setActiveDayCourtFee(day?.courtFeeUsed ?? (f?.courtFee ?? 375000));
       const keys = await listDayKeys();
       setHistoryKeys(keys);
       setLoading(false);
@@ -109,6 +114,8 @@ export default function App() {
       setCheckins(day?.checkins || []);
       setIsLocked(day?.locked || false);
       setDayNote(day?.note || '');
+      setActiveDayWaterFee(day?.waterFeeUsed ?? waterFee);
+      setActiveDayCourtFee(day?.courtFeeUsed ?? courtFee);
       dateLoadingRef.current = false;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,6 +124,14 @@ export default function App() {
   // ---------- Persist ----------
   useEffect(() => { if (!loading) storageSet('members', members); }, [members, loading]);
   useEffect(() => { if (!loading) storageSet('fee-config', { fee, waterFee, courtFee }); }, [fee, waterFee, courtFee, loading]);
+  // Keep active-day fees in sync when settings change while on today's date
+  useEffect(() => {
+    if (!loading && activeDateKey === todayKey) {
+      setActiveDayWaterFee(waterFee);
+      setActiveDayCourtFee(courtFee);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waterFee, courtFee]);
   useEffect(() => {
     // Skip if: initial load not done, date switch in progress, or day is locked.
     // Lock state changes are saved separately via handleLockToggle to avoid this guard.
@@ -352,8 +367,8 @@ export default function App() {
       timeStr: formatVNTime(now),
       rows: sortMembersFirst(checkins).map(c => ({ ...c })),
       feeUsed: fee,
-      waterFeeUsed: waterFee,
-      courtFeeUsed: courtFee,
+      waterFeeUsed: activeDayWaterFee,
+      courtFeeUsed: activeDayCourtFee,
     });
   };
 
