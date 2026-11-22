@@ -1208,17 +1208,14 @@ function SettingsModal({ fee, setFee, waterFee, setWaterFee, courtFee, setCourtF
               { label: 'Tiền sân', val: courtVal, setVal: setCourtVal },
             ].map(({ label, val: v, setVal: sv }) => (
               <div key={label}>
-                <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600, marginBottom: 4 }}>{label}</div>
-                <div className="flex items-center gap-1">
-                  <input
-                    inputMode="decimal"
-                    value={v}
-                    onChange={e => sv(e.target.value.replace(/[^\d.]/g, ''))}
-                    className="flex-1 px-2 py-2 rounded-lg text-sm outline-none text-right"
-                    style={{ border: `1px solid ${COLORS.line}` }}
-                  />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted }}>K</span>
-                </div>
+                <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600, marginBottom: 4 }}>{label} (K)</div>
+                <input
+                  inputMode="decimal"
+                  value={v}
+                  onChange={e => sv(e.target.value.replace(/[^\d.]/g, ''))}
+                  className="w-full px-2 py-2 rounded-lg text-sm outline-none text-right"
+                  style={{ border: `1px solid ${COLORS.line}` }}
+                />
               </div>
             ))}
           </div>
